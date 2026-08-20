@@ -39,6 +39,66 @@ setup, run `npm run use:sqlite`.
 
 ---
 
+## Deploying
+
+The app is a **server plus a database**, not a static site. Publishing only
+`web/dist` gives you a working-looking sign-in screen whose every request 404s,
+because there is no API behind it.
+
+### Netlify (config included)
+
+`netlify.toml` builds the frontend, runs the Express API as a Netlify Function
+at `/api/*`, and schedules the hourly sweeps as a background function.
+
+1. **Create a Postgres database.** SQLite cannot be used — a function has no
+   persistent disk. [Neon](https://neon.tech) works well and has a free tier.
+2. **Push the schema and seed it, from your machine:**
+   ```bash
+   npm run use:postgres
+   DATABASE_URL="postgres://…" npm run db:push
+   DATABASE_URL="postgres://…" npm run seed
+   ```
+3. **Set the environment variables** in Site settings → Environment variables:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | your Postgres connection string |
+   | `JWT_ACCESS_SECRET` | a long random string |
+   | `JWT_REFRESH_SECRET` | a different long random string |
+   | `NODE_ENV` | `production` |
+   | `CLIENT_ORIGIN` | your site URL, e.g. `https://apcrda-allotment.netlify.app` |
+
+   The API refuses to start in production while the JWT secrets still hold their
+   demo defaults, so these two are not optional.
+4. **Deploy.** Netlify picks up `netlify.toml` automatically; no build settings
+   need to be entered by hand.
+
+Check it worked by opening `/health` on your site — it should return JSON, not
+an HTML page.
+
+**Known limit on serverless:** file uploads need a writable disk, which a Netlify
+Function does not have. Everything else works; uploading a document returns a
+clear error until object storage is configured (`STORAGE_DRIVER=s3`). If you need
+uploads, host the API on a container platform instead.
+
+### Any Node host (Render, Railway, Fly, a VM)
+
+A better fit if you want uploads and the built-in hourly sweeps.
+
+```bash
+npm run use:postgres
+npm install && npm run build
+DATABASE_URL=… JWT_ACCESS_SECRET=… JWT_REFRESH_SECRET=… npm run start
+```
+
+Then build the frontend pointing at it, and host `web/dist` anywhere:
+
+```bash
+VITE_API_URL=https://your-api.example.com npm run build --workspace web
+```
+
+---
+
 ## Demo credentials
 
 > **Demo credentials — change before production.** Set `VITE_SHOW_DEMO_LOGINS=false` to hide the

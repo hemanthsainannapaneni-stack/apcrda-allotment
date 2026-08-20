@@ -60,6 +60,18 @@ async function tryRefresh(): Promise<boolean> {
 
 type Options = RequestInit & { raw?: boolean; retry?: boolean };
 
+/**
+ * Where the API lives. Empty (the default) means "same origin" — the Vite dev
+ * proxy in development, and the /api redirect in a deployed build. Set
+ * VITE_API_URL to point a static frontend at an API hosted somewhere else.
+ */
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+
+export function apiUrl(path: string) {
+  const rel = path.startsWith('/api') ? path : `/api${path}`;
+  return `${API_BASE}${rel}`;
+}
+
 export async function api<T = any>(path: string, options: Options = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!(options.body instanceof FormData) && options.body) {
@@ -67,7 +79,7 @@ export async function api<T = any>(path: string, options: Options = {}): Promise
   }
   if (tokens.access) headers.set('Authorization', `Bearer ${tokens.access}`);
 
-  const res = await fetch(path.startsWith('/api') ? path : `/api${path}`, { ...options, headers });
+  const res = await fetch(apiUrl(path), { ...options, headers });
 
   if (res.status === 401 && options.retry !== false) {
     const ok = await tryRefresh();
@@ -85,17 +97,33 @@ export async function api<T = any>(path: string, options: Options = {}): Promise
   const text = await res.text();
   const data = text ? safeJson(text) : null;
 
+  if (data === NOT_JSON) {
+    // The API is not answering — usually the frontend is deployed without a
+    // backend, so the host's own 404/502 page comes back instead of JSON.
+    // Never render that page into the UI; say what is actually wrong.
+    throw new ApiError(
+      res.status,
+      res.status === 404
+        ? 'The server could not be reached — no API is responding at this address. ' +
+          'If this is a deployed site, check that the backend is running and that /api requests reach it.'
+        : `The server returned an unexpected response (${res.status}). Please try again, or contact the administrator if it continues.`
+    );
+  }
+
   if (!res.ok) {
     throw new ApiError(res.status, data?.error ?? `Request failed (${res.status})`, data?.details);
   }
   return data as T;
 }
 
+/** Sentinel: the body was not JSON at all, so there is no error message to show. */
+const NOT_JSON = Symbol('not-json') as unknown as any;
+
 function safeJson(text: string) {
   try {
     return JSON.parse(text);
   } catch {
-    return { error: text };
+    return NOT_JSON;
   }
 }
 

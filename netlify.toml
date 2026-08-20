@@ -1,0 +1,61 @@
+# Netlify deployment for the APCRDA Land Allotment Portal.
+#
+# The frontend is a static build; the Express API runs as a single Netlify
+# Function. Both are served from one origin, so /api calls need no CORS.
+#
+# Required environment variables (Site settings → Environment variables):
+#   DATABASE_URL          Postgres connection string (Neon, Supabase, RDS …).
+#                         SQLite cannot be used here — a function has no disk.
+#   JWT_ACCESS_SECRET     Long random string.
+#   JWT_REFRESH_SECRET    A different long random string.
+#   NODE_ENV=production
+#   CLIENT_ORIGIN         Your site URL, e.g. https://apcrda-allotment.netlify.app
+#
+# Before the first deploy, from your machine:
+#   npm run use:postgres
+#   DATABASE_URL="<your postgres url>" npm run db:push
+#   DATABASE_URL="<your postgres url>" npm run seed
+
+[build]
+  command = "npm run build:netlify"
+  publish = "web/dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Prisma must ship the engine that matches the Lambda runtime.
+  PRISMA_CLI_BINARY_TARGETS = "native,rhel-openssl-3.0.x"
+
+[functions]
+  node_bundler = "esbuild"
+  # The generated Prisma client and its query engine are loaded at runtime and
+  # cannot be traced by the bundler, so they are copied in explicitly.
+  included_files = [
+    "server/prisma/schema.prisma",
+    "node_modules/.prisma/client/**",
+    "node_modules/@prisma/client/**"
+  ]
+  external_node_modules = ["@prisma/client", ".prisma/client"]
+
+[functions."sweeps-background"]
+  # Hourly, matching the interval the long-running server uses.
+  schedule = "@hourly"
+
+# API first — this must precede the SPA catch-all below.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/health"
+  to = "/.netlify/functions/api/health"
+  status = 200
+  force = true
+
+# Single-page app: every other path serves the built index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

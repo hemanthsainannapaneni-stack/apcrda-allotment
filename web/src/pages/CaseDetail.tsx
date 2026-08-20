@@ -12,7 +12,7 @@ import {
   Printer,
   Wallet,
 } from 'lucide-react';
-import { get, post, qs } from '../lib/api';
+import { download, get, post, qs } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { compactIndian, fmtDate, fmtDateTime, fmtINR, humanise, relativeDays } from '../lib/format';
 import { plainStage } from '../lib/plain';
@@ -282,6 +282,7 @@ export default function CaseDetail() {
 // ---------------------------------------------------------------------------
 
 function DocumentsTab({ caseId }: { caseId: string }) {
+  const toast = useToast();
   const { data, isLoading } = useQuery({
     queryKey: ['documents', caseId],
     queryFn: () => get(`/documents${qs({ caseId })}`),
@@ -334,11 +335,25 @@ function DocumentsTab({ caseId }: { caseId: string }) {
                 </Badge>
               </Td>
               <Td align="right">
-                <a href={`/api/documents/${d.id}/download`} target="_blank" rel="noreferrer">
-                  <Button variant="ghost" size="sm" icon={<Download className="h-3.5 w-3.5" />}>
-                    Download
-                  </Button>
-                </a>
+                {/*
+                  Fetched through the API client rather than a plain link: the
+                  download endpoint requires a bearer token, which an <a href>
+                  cannot send, and the API may live on another origin.
+                */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Download className="h-3.5 w-3.5" />}
+                  onClick={async () => {
+                    try {
+                      await download(`/documents/${d.id}/download`, d.name);
+                    } catch (e: any) {
+                      toast.error(e.message);
+                    }
+                  }}
+                >
+                  Download
+                </Button>
               </Td>
             </tr>
           ))}

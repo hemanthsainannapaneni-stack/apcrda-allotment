@@ -59,15 +59,50 @@ const s3NotConfigured: StorageDriver = {
 
 export const storage: StorageDriver = env.storageDriver === 's3' ? s3NotConfigured : localDriver;
 
+/**
+ * Creating the upload directory must never crash the process. On a serverless
+ * host the filesystem is read-only apart from /tmp, and this module is imported
+ * on every cold start — a throw here would take down the whole API rather than
+ * just the upload feature.
+ */
 function ensureDir(dir: string) {
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[storage] cannot create upload directory ${dir} (${(err as Error).message}). ` +
+        'File uploads will be rejected. Set UPLOAD_DIR to a writable path, or configure object storage.'
+    );
+    return dir;
+  }
 }
 
-ensureDir(env.uploadDir);
+export const uploadsWritable = (() => {
+  ensureDir(env.uploadDir);
+  try {
+    fs.accessSync(env.uploadDir, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 export function uploader(folder: string) {
   const dest = ensureDir(path.join(env.uploadDir, folder));
+  if (!uploadsWritable) {
+    // Fail with a clear message instead of an opaque EROFS from multer.
+    return {
+      single: () => (_req: any, _res: any, next: any) =>
+        next(
+          new Error(
+            'File uploads are not available on this deployment because there is no writable storage. ' +
+              'Configure object storage (STORAGE_DRIVER=s3) or run the API on a host with a persistent disk.'
+          )
+        ),
+    } as any;
+  }
   return multer({
     limits: { fileSize: env.maxUploadMb * 1024 * 1024 },
     storage: multer.diskStorage({
