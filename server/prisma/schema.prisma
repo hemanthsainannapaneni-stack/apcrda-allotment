@@ -1,0 +1,492 @@
+// Amaravati Land Allotment Tracking & Review Portal - APCRDA
+//
+// Datasource provider is swapped by `npm run use:postgres` / `npm run use:sqlite`.
+// SQLite is the default so the demo runs with zero infrastructure. Because SQLite
+// supports neither native enums nor scalar lists, enum-ish columns are stored as
+// String (values are centralised in src/lib/enums.ts) and structured blobs are
+// stored as JSON text (read/written through src/lib/json.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity, roles & permissions
+// ---------------------------------------------------------------------------
+
+model Role {
+  key          String       @id
+  name         String
+  description  String       @default("")
+  capabilities String       @default("[]") // JSON string[] - non-stage abilities
+  isSystem     Boolean      @default(true)
+  sortOrder    Int          @default(0)
+  users        User[]
+  permissions  Permission[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  roleKey      String
+  role         Role      @relation(fields: [roleKey], references: [key])
+  wing         String?
+  committee    String?
+  designation  String?
+  phone        String?
+  status       String    @default("ACTIVE") // ACTIVE | SUSPENDED
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  lastLoginAt  DateTime?
+  mustReset    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  applicantProfiles      Applicant[]
+  decisions              Decision[]
+  documents              Document[]
+  grievancesRaised       Grievance[]     @relation("GrievanceRaiser")
+  grievancesAssigned     Grievance[]     @relation("GrievanceAssignee")
+  cancellationsInitiated Cancellation[]  @relation("CancellationInitiator")
+  cancellationsApproved  Cancellation[]  @relation("CancellationApprover")
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  refreshTokens          RefreshToken[]
+  comments               CaseComment[]
+  assignedCases          Case[]          @relation("CaseAssignee")
+  resetTokens            PasswordReset[]
+
+  @@index([roleKey])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+/// Workflow stage catalogue - configurable data, not hard-coded branches.
+model Stage {
+  id           String  @id // S0, S1, S1A, S2 ...
+  code         String  @unique // display code: "0", "1", "1a", "2" ...
+  name         String
+  order        Int     @unique
+  phase        String // A | B | C | D
+  type         String // SETUP INTAKE GATE REVIEW_LOOP REVIEW COMMITTEE APPROVAL ISSUANCE FINANCIAL LEGAL OPERATIONAL MONITORING COMPLIANCE
+  ownerRoleKey String
+  coOwnerRole  String?
+  slaDays      Int     @default(7)
+  maxRounds    Int     @default(1)
+  roundLabels  String  @default("[\"R0\"]") // JSON string[]
+  outcomes     String  @default("[]") // JSON {value,label,kind,requiresRemarks,to?}[]
+  fields       String  @default("[]") // JSON field descriptors for the active-stage form
+  docTypes     String  @default("[]") // JSON string[] of expected document types
+  routing      String  @default("{}") // JSON {onPass?, onReturn?, rule?}
+  optional     Boolean @default(false)
+  enabled      Boolean @default(true)
+  description  String  @default("")
+
+  permissions Permission[]
+  instances   StageInstance[]
+  documents   Document[]
+}
+
+model Permission {
+  id      String  @id @default(cuid())
+  roleKey String
+  role    Role    @relation(fields: [roleKey], references: [key], onDelete: Cascade)
+  stageId String
+  stage   Stage   @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  canView Boolean @default(true)
+  canAct  Boolean @default(false)
+
+  @@unique([roleKey, stageId])
+}
+
+// ---------------------------------------------------------------------------
+// Land inventory (Stage 0)
+// ---------------------------------------------------------------------------
+
+model Plot {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  name              String
+  extentAcres       Float
+  surveyRef         String
+  gisRef            String   @default("")
+  zoneCode          String
+  themeCity         String
+  landUse           String
+  fsi               Float    @default(2)
+  far               Float    @default(2)
+  reservePrice      Float // INR per acre
+  objectiveCategory String
+  landCategory      String   @default("NORMAL") // NORMAL | SENSITIVE
+  availability      String   @default("AVAILABLE") // AVAILABLE | RESERVED | ALLOTTED | WITHDRAWN
+  notes             String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  cases       Case[]
+  invitations InvitationPlot[]
+}
+
+model InvitationDocument {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  title       String
+  terms       String    @default("")
+  mode        String
+  status      String    @default("DRAFT") // DRAFT | PUBLISHED | CLOSED
+  publishedAt DateTime?
+  closesAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  plots InvitationPlot[]
+}
+
+model InvitationPlot {
+  invitationId String
+  invitation   InvitationDocument @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  plotId       String
+  plot         Plot               @relation(fields: [plotId], references: [id], onDelete: Cascade)
+
+  @@id([invitationId, plotId])
+}
+
+// ---------------------------------------------------------------------------
+// Cases
+// ---------------------------------------------------------------------------
+
+model Applicant {
+  id              String   @id @default(cuid())
+  entityType      String
+  name            String
+  promoterProfile String   @default("")
+  netWorth        Float    @default(0)
+  pan             String   @default("")
+  cin             String   @default("")
+  contactUserId   String?
+  contactUser     User?    @relation(fields: [contactUserId], references: [id])
+  contactEmail    String   @default("")
+  contactPhone    String   @default("")
+  address         String   @default("")
+  createdAt       DateTime @default(now())
+
+  cases Case[]
+}
+
+model Case {
+  id                String    @id @default(cuid())
+  code              String    @unique
+  title             String    @default("")
+  applicantId       String
+  applicant         Applicant @relation(fields: [applicantId], references: [id])
+  plotId            String?
+  plot              Plot?     @relation(fields: [plotId], references: [id])
+  mode              String    @default("NOMINATION")
+  objectiveCategory String    @default("ECONOMIC_DEVELOPMENT")
+  sector            String    @default("")
+  investmentAmount  Float     @default(0)
+  jobsCommitted     Int       @default(0)
+  extentAcres       Float     @default(0)
+  holdingType       String    @default("LEASEHOLD") // LEASEHOLD | FREEHOLD
+  isConcessional    Boolean   @default(false)
+  landCategory      String    @default("NORMAL")
+
+  currentStageId String?
+  status         String  @default("DRAFT") // DRAFT IN_PROGRESS ON_HOLD REJECTED LAPSED CANCELLED RESUMED COMPLETED
+  phase          String  @default("A")
+  requiresCabinet Boolean?
+  cabinetTestNote String  @default("")
+
+  assigneeId String?
+  assignee   User?   @relation("CaseAssignee", fields: [assigneeId], references: [id])
+
+  slaDueAt             DateTime?
+  loiIssuedAt          DateTime?
+  loiValidUntil        DateTime?
+  loiAcceptedAt        DateTime?
+  agreementDate        DateTime?
+  registrationDate     DateTime?
+  possessionDate       DateTime?
+  commencementDeadline DateTime?
+  goNumber             String?
+  goDate               DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  closedAt  DateTime?
+  deletedAt DateTime?
+
+  stageInstances StageInstance[]
+  documents      Document[]
+  payments       Payment[]
+  grievances     Grievance[]
+  cancellations  Cancellation[]
+  milestones     ConstructionMilestone[]
+  compliance     ComplianceRecord?
+  permission     BuildingPermission?
+  comments       CaseComment[]
+  notifications  Notification[]
+
+  @@index([status])
+  @@index([currentStageId])
+  @@index([applicantId])
+}
+
+model StageInstance {
+  id           String    @id @default(cuid())
+  caseId       String
+  case         Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  stageId      String
+  stage        Stage     @relation(fields: [stageId], references: [id])
+  round        Int       @default(0)
+  roundLabel   String    @default("R0")
+  status       String    @default("ACTIVE") // PENDING ACTIVE COMPLETED RETURNED REJECTED DEFERRED SKIPPED LAPSED
+  ownerRoleKey String
+  data         String    @default("{}") // JSON captured stage fields
+  dueAt        DateTime?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  decisions Decision[]
+
+  @@index([caseId])
+  @@index([stageId, status])
+}
+
+model Decision {
+  id              String        @id @default(cuid())
+  stageInstanceId String
+  stageInstance   StageInstance @relation(fields: [stageInstanceId], references: [id], onDelete: Cascade)
+  actorId         String?
+  actor           User?         @relation(fields: [actorId], references: [id])
+  actorName       String        @default("")
+  actorRole       String        @default("")
+  outcome         String
+  outcomeLabel    String        @default("")
+  kind            String // pass | return | reject | defer | lapse
+  remarks         String
+  createdAt       DateTime      @default(now())
+
+  @@index([stageInstanceId])
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  caseId       String?
+  case         Case?    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  stageId      String?
+  stage        Stage?   @relation(fields: [stageId], references: [id])
+  type         String
+  name         String
+  version      Int      @default(1)
+  fileUrl      String
+  mimeType     String   @default("application/pdf")
+  size         Int      @default(0)
+  visibility   String   @default("INTERNAL") // INTERNAL | INVESTOR
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+  uploadedAt   DateTime @default(now())
+
+  @@index([caseId])
+}
+
+model Payment {
+  id         String    @id @default(cuid())
+  caseId     String
+  case       Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  type       String // EMD PROCESSING_FEE DOWN_PAYMENT INSTALMENT STAMP_DUTY REGISTRATION_CHARGE PENALTY REFUND
+  label      String
+  amount     Float
+  dueDate    DateTime?
+  paidDate   DateTime?
+  status     String    @default("PENDING") // PENDING PAID OVERDUE WAIVED REFUNDED FORFEITED
+  penalty    Float     @default(0)
+  reference  String    @default("")
+  receiptUrl String?
+  note       String    @default("")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([caseId])
+  @@index([status])
+}
+
+model Grievance {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  caseId      String?
+  case        Case?     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  raisedById  String?
+  raisedBy    User?     @relation("GrievanceRaiser", fields: [raisedById], references: [id])
+  subject     String
+  description String
+  category    String    @default("DECISION_APPEAL")
+  status      String    @default("OPEN") // OPEN | UNDER_REVIEW | RESOLVED | REJECTED
+  assigneeId  String?
+  assignee    User?     @relation("GrievanceAssignee", fields: [assigneeId], references: [id])
+  slaDueAt    DateTime?
+  resolution  String    @default("")
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model Cancellation {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  caseId        String
+  case          Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  initiatedById String?
+  initiatedBy   User?     @relation("CancellationInitiator", fields: [initiatedById], references: [id])
+  initiatedSide String    @default("APCRDA") // INVESTOR | APCRDA
+  type          String // WITHDRAWAL | CANCELLATION | RESUMPTION
+  reason        String
+  refundAmount  Float     @default(0)
+  forfeitAmount Float     @default(0)
+  status        String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  approvedById  String?
+  approvedBy    User?     @relation("CancellationApprover", fields: [approvedById], references: [id])
+  decisionNote  String    @default("")
+  createdAt     DateTime  @default(now())
+  decidedAt     DateTime?
+
+  @@index([caseId])
+}
+
+model ConstructionMilestone {
+  id          String    @id @default(cuid())
+  caseId      String
+  case        Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  title       String
+  plannedDate DateTime
+  plannedPct  Float     @default(0)
+  actualDate  DateTime?
+  actualPct   Float     @default(0)
+  status      String    @default("PLANNED") // PLANNED | IN_PROGRESS | COMPLETED | DELAYED
+  note        String    @default("")
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([caseId])
+}
+
+model ComplianceRecord {
+  id                   String    @id @default(cuid())
+  caseId               String    @unique
+  case                 Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  commencementDeadline DateTime?
+  commencedAt          DateTime?
+  utilisationCertUrl   String?
+  completionCertUrl    String?
+  status               String    @default("PENDING") // PENDING | GOOD_STANDING | AT_RISK | BREACH_NOTICE | CURE_PERIOD | RESUMED | COMPLETED
+  noticeIssuedAt       DateTime?
+  cureDeadline         DateTime?
+  note                 String    @default("")
+  updatedAt            DateTime  @updatedAt
+}
+
+model BuildingPermission {
+  id            String    @id @default(cuid())
+  caseId        String    @unique
+  case          Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  applicationNo String    @default("")
+  proposedFsi   Float     @default(0)
+  proposedFar   Float     @default(0)
+  builtUpArea   Float     @default(0)
+  layoutApproved Boolean  @default(false)
+  nocs          String    @default("[]") // JSON {type,status,ref,date}[]
+  status        String    @default("NOT_STARTED") // NOT_STARTED | SUBMITTED | UNDER_SCRUTINY | SANCTIONED | REJECTED
+  sanctionedAt  DateTime?
+  remarks       String    @default("")
+  updatedAt     DateTime  @updatedAt
+}
+
+model CaseComment {
+  id         String   @id @default(cuid())
+  caseId     String
+  case       Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?    @relation(fields: [authorId], references: [id])
+  body       String
+  visibility String   @default("INTERNAL") // INTERNAL | INVESTOR
+  createdAt  DateTime @default(now())
+
+  @@index([caseId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String
+  caseId    String?
+  case      Case?    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  actorName String   @default("System")
+  actorRole String   @default("")
+  action    String
+  entity    String
+  entityId  String   @default("")
+  caseCode  String   @default("")
+  summary   String   @default("")
+  before    String? // JSON
+  after     String? // JSON
+  ip        String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  group     String   @default("general")
+  label     String   @default("")
+  type      String   @default("string") // string | number | boolean | json | list
+  help      String   @default("")
+  updatedAt DateTime @updatedAt
+}

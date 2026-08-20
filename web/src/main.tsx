@@ -1,0 +1,32 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import App from './App';
+import { AuthProvider } from './lib/auth';
+import { ToastProvider } from './components/ui';
+import './index.css';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (count, error: any) => (error?.status >= 400 && error?.status < 500 ? false : count < 2),
+      refetchOnWindowFocus: false,
+      staleTime: 15_000,
+    },
+  },
+});
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </ToastProvider>
+      </QueryClientProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);

@@ -1,0 +1,63 @@
+version: "3.9"
+
+# Production-shaped stack: Postgres + API + built frontend.
+# Before using this, switch the Prisma datasource:  npm run use:postgres
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: apcrda-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: apcrda
+      POSTGRES_PASSWORD: apcrda
+      POSTGRES_DB: amaravati
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apcrda -d amaravati"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: apcrda-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://apcrda:apcrda@db:5432/amaravati?schema=public
+      NODE_ENV: production
+      PORT: 4000
+      CLIENT_ORIGIN: http://localhost:8080
+      JWT_ACCESS_SECRET: change-me-access
+      JWT_REFRESH_SECRET: change-me-refresh
+      UPLOAD_DIR: /app/server/uploads
+    ports:
+      - "4000:4000"
+    volumes:
+      - uploads:/app/server/uploads
+    command: sh -c "npx prisma db push --schema server/prisma/schema.prisma --accept-data-loss && npm run seed && npm run start"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    container_name: apcrda-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
+  uploads:

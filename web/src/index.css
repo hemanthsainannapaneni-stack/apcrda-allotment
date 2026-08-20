@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-ink-100 text-ink-800 antialiased;
+  }
+  /* Visible focus ring everywhere — the portal must be keyboard navigable. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-navy-500 ring-offset-2 ring-offset-white;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-300;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+}
+
+@layer components {
+  .field-label {
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-500;
+  }
+  .input-base {
+    @apply w-full rounded-md border border-ink-300 bg-white px-3 py-2 text-sm text-ink-800
+           placeholder:text-ink-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-200
+           disabled:cursor-not-allowed disabled:bg-ink-100 disabled:text-ink-500;
+  }
+  .link {
+    @apply text-navy-700 underline-offset-2 hover:underline;
+  }
+  .table-scroll {
+    @apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
+  }
+}
+
+/* Print: reports and case sheets should come out clean. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    @apply bg-white;
+  }
+}

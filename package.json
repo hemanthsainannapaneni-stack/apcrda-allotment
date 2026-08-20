@@ -1,0 +1,30 @@
+{
+  "name": "amaravati-land-allotment-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "APCRDA Amaravati Land Allotment Tracking & Review Portal",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "setup": "npm install && npm run db:push && npm run seed",
+    "dev": "concurrently -n api,web -c blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev --workspace server",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspace server && npm run build --workspace web",
+    "start": "npm run start --workspace server",
+    "db:push": "npm run db:push --workspace server",
+    "db:studio": "npm run db:studio --workspace server",
+    "seed": "npm run seed --workspace server",
+    "reset": "npm run reset --workspace server",
+    "use:postgres": "node scripts/use-db.mjs postgresql",
+    "use:sqlite": "node scripts/use-db.mjs sqlite"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
