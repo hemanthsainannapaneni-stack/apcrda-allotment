@@ -40,14 +40,89 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+/**
+ * Health check. When the database is unreachable this has to say *why* —
+ * "database unavailable" alone is not enough to debug a deployment. Credentials
+ * are stripped from everything reported here.
+ */
 app.get('/health', async (_req, res) => {
+  const database = describeDatabase();
+  const base = { service: 'apcrda-land-allotment-api', time: new Date().toISOString(), database };
+
+  if (!database.configured) {
+    return res.status(503).json({
+      ...base,
+      ok: false,
+      error: 'DATABASE_URL is not set',
+      hint: 'Add DATABASE_URL to the environment variables of whatever is hosting the API, then redeploy.',
+    });
+  }
+
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ ok: true, service: 'apcrda-land-allotment-api', time: new Date().toISOString() });
-  } catch {
-    res.status(503).json({ ok: false, error: 'database unavailable' });
+    return res.json({ ...base, ok: true });
+  } catch (err: any) {
+    return res.status(503).json({
+      ...base,
+      ok: false,
+      error: 'database unavailable',
+      reason: redact(err?.message ?? String(err)),
+      code: err?.errorCode ?? err?.code ?? null,
+      hint: hintFor(database),
+    });
   }
 });
+
+type DatabaseInfo = {
+  configured: boolean;
+  provider?: string;
+  host?: string;
+  name?: string;
+  pooled?: boolean;
+  sslmode?: string | null;
+  invalid?: boolean;
+};
+
+/** Connection details with the credentials removed, for diagnostics. */
+function describeDatabase(): DatabaseInfo {
+  const raw = process.env.DATABASE_URL ?? '';
+  if (!raw) return { configured: false };
+  try {
+    const url = new URL(raw);
+    return {
+      configured: true,
+      provider: url.protocol.replace(':', ''),
+      host: url.host,
+      name: url.pathname.replace(/^\//, '') || undefined,
+      pooled: /-pooler\./.test(url.hostname),
+      sslmode: url.searchParams.get('sslmode'),
+    };
+  } catch {
+    return { configured: true, invalid: true };
+  }
+}
+
+function hintFor(db: DatabaseInfo) {
+  if (db.invalid) return 'DATABASE_URL is not a valid connection string.';
+  if (db.provider === 'file') {
+    return 'DATABASE_URL points at a SQLite file. A serverless function has no persistent disk — use a hosted Postgres database.';
+  }
+  if (db.host?.includes('neon.tech') && !db.pooled) {
+    return 'Neon: use the pooled connection string (the host contains "-pooler") for serverless, and make sure sslmode=require is set.';
+  }
+  if (db.sslmode === null) {
+    return 'Most hosted Postgres providers require SSL. Try appending ?sslmode=require to DATABASE_URL.';
+  }
+  return 'Check the database is running and reachable, and that the schema has been pushed (npm run db:push).';
+}
+
+/** Never echo a password back, even in an error message. */
+function redact(message: string) {
+  return message
+    .replace(/\/\/[^:@\s/]+:[^@\s/]+@/g, '//***:***@')
+    .replace(/(password|pgpassword)=([^\s&;]+)/gi, '$1=***')
+    .slice(0, 400);
+}
 
 app.use('/api/auth', authRouter);
 
