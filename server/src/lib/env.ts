@@ -5,6 +5,24 @@ import path from 'node:path';
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
+/**
+ * Some hosts provision a database under their own variable name. Netlify DB
+ * (Neon) sets NETLIFY_DATABASE_URL; Heroku-style add-ons set POSTGRES_URL.
+ * Prisma only reads DATABASE_URL, so alias whichever one is present before the
+ * client is constructed. Setting it on process.env (rather than just in `env`)
+ * matters because Prisma reads the variable itself, not this module.
+ */
+if (!process.env.DATABASE_URL) {
+  const alias = ['NETLIFY_DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'DATABASE_POSTGRES_URL'].find(
+    (key) => !!process.env[key]
+  );
+  if (alias) {
+    process.env.DATABASE_URL = process.env[alias];
+    // eslint-disable-next-line no-console
+    console.log(`[env] DATABASE_URL not set; using ${alias} instead.`);
+  }
+}
+
 function str(key: string, fallback: string): string {
   const v = process.env[key];
   return v === undefined || v === '' ? fallback : v;
