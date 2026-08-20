@@ -81,76 +81,68 @@ async function wipe() {
 // ---------------------------------------------------------------------------
 
 async function seedRoles() {
-  for (const [i, role] of ROLE_SEED.entries()) {
-    await prisma.role.create({
-      data: {
-        key: role.key,
-        name: role.name,
-        description: role.description,
-        capabilities: toJson(role.capabilities),
-        sortOrder: i,
-      },
-    });
-  }
+  await prisma.role.createMany({
+    data: ROLE_SEED.map((role, i) => ({
+      key: role.key,
+      name: role.name,
+      description: role.description,
+      capabilities: toJson(role.capabilities),
+      sortOrder: i,
+    })),
+  });
 }
 
 async function seedStages() {
-  for (const stage of STAGE_CATALOGUE) {
-    await prisma.stage.create({
-      data: {
-        id: stage.id,
-        code: stage.code,
-        name: stage.name,
-        order: stage.order,
-        phase: stage.phase,
-        type: stage.type,
-        ownerRoleKey: stage.ownerRoleKey,
-        coOwnerRole: stage.coOwnerRole ?? null,
-        slaDays: stage.slaDays,
-        maxRounds: stage.maxRounds,
-        roundLabels: toJson(stage.roundLabels),
-        outcomes: toJson(stage.outcomes),
-        fields: toJson(stage.fields),
-        docTypes: toJson(stage.docTypes),
-        routing: toJson(stage.routing),
-        optional: stage.optional ?? false,
-        enabled: true,
-        description: stage.description,
-      },
-    });
-  }
+  await prisma.stage.createMany({
+    data: STAGE_CATALOGUE.map((stage) => ({
+      id: stage.id,
+      code: stage.code,
+      name: stage.name,
+      order: stage.order,
+      phase: stage.phase,
+      type: stage.type,
+      ownerRoleKey: stage.ownerRoleKey,
+      coOwnerRole: stage.coOwnerRole ?? null,
+      slaDays: stage.slaDays,
+      maxRounds: stage.maxRounds,
+      roundLabels: toJson(stage.roundLabels),
+      outcomes: toJson(stage.outcomes),
+      fields: toJson(stage.fields),
+      docTypes: toJson(stage.docTypes),
+      routing: toJson(stage.routing),
+      optional: stage.optional ?? false,
+      enabled: true,
+      description: stage.description,
+    })),
+  });
 }
 
 async function seedPermissions() {
-  for (const stage of STAGE_CATALOGUE) {
-    for (const role of ROLE_SEED) {
+  const rows = STAGE_CATALOGUE.flatMap((stage) =>
+    ROLE_SEED.map((role) => {
       const matrix = PERMISSION_MATRIX[role.key] ?? { act: [], view: 'ALL' as const };
       const canAct = role.key === ROLES.SUPER_ADMIN || matrix.act.includes(stage.id);
       const canView =
         role.key === ROLES.INVESTOR
           ? true // scoped to their own cases elsewhere
           : matrix.view === 'ALL' || canAct || (matrix.view as string[]).includes(stage.id);
-
-      await prisma.permission.create({
-        data: { roleKey: role.key, stageId: stage.id, canAct, canView },
-      });
-    }
-  }
+      return { roleKey: role.key, stageId: stage.id, canAct, canView };
+    })
+  );
+  await prisma.permission.createMany({ data: rows });
 }
 
 async function seedSettings() {
-  for (const s of SETTINGS_SEED) {
-    await prisma.setting.create({
-      data: {
-        key: s.key,
-        value: typeof s.value === 'string' ? s.value : toJson(s.value),
-        group: s.group,
-        label: s.label,
-        type: s.type,
-        help: s.help ?? '',
-      },
-    });
-  }
+  await prisma.setting.createMany({
+    data: SETTINGS_SEED.map((s) => ({
+      key: s.key,
+      value: typeof s.value === 'string' ? s.value : toJson(s.value),
+      group: s.group,
+      label: s.label,
+      type: s.type,
+      help: s.help ?? '',
+    })),
+  });
 }
 
 async function seedUsers() {
@@ -175,11 +167,9 @@ async function seedUsers() {
 }
 
 async function seedPlots() {
-  const map: Record<string, any> = {};
-  for (const p of PLOT_SEED) {
-    map[p.code] = await prisma.plot.create({ data: p });
-  }
-  return map;
+  await prisma.plot.createMany({ data: PLOT_SEED as any });
+  const rows = await prisma.plot.findMany();
+  return Object.fromEntries(rows.map((p) => [p.code, p])) as Record<string, any>;
 }
 
 async function seedInvitations(plots: Record<string, any>) {
@@ -298,6 +288,43 @@ type WalkCtx = {
 };
 
 const stageById = Object.fromEntries(STAGE_CATALOGUE.map((s) => [s.id, s])) as Record<string, StageDef>;
+
+/**
+ * Rows whose generated ids nothing else refers to are queued here and inserted
+ * with createMany. On a local SQLite file the difference is invisible; against a
+ * remote database it is the difference between ~1,800 round trips and a few
+ * dozen, which is what makes seeding a hosted database practical.
+ */
+const pending = {
+  documents: [] as any[],
+  audit: [] as any[],
+  payments: [] as any[],
+  milestones: [] as any[],
+  notifications: [] as any[],
+  comments: [] as any[],
+};
+
+/** Document versions, tracked in memory so no findFirst is needed per upload. */
+const docVersions = new Map<string, number>();
+
+async function flushPending() {
+  const batches: [string, any[]][] = [
+    ['document', pending.documents],
+    ['auditLog', pending.audit],
+    ['payment', pending.payments],
+    ['constructionMilestone', pending.milestones],
+    ['notification', pending.notifications],
+    ['caseComment', pending.comments],
+  ];
+  for (const [model, rows] of batches) {
+    if (!rows.length) continue;
+    // Chunked: a single statement with thousands of rows can exceed parameter limits.
+    for (let i = 0; i < rows.length; i += 500) {
+      await (prisma as any)[model].createMany({ data: rows.slice(i, i + 500) });
+    }
+    rows.length = 0;
+  }
+}
 
 /** Mirrors engine.isStageApplicable so the seeded timeline matches live routing. */
 function applicable(stage: StageDef, c: any) {
@@ -447,8 +474,7 @@ async function seedCases(ctx: WalkCtx) {
         });
         decisions += 1;
 
-        await prisma.auditLog.create({
-          data: {
+        pending.audit.push({
             actorId: actor.id,
             actorName: actor.name,
             actorRole: roleName(stage.ownerRoleKey),
@@ -458,11 +484,10 @@ async function seedCases(ctx: WalkCtx) {
             caseCode: caseRow.code,
             summary: `Stage ${stage.code} (${instance.roundLabel}) — ${outcome.label}`,
             createdAt: completedAt,
-          },
         });
 
         caseRow = await applyCaseEffects(caseRow, stage, data, completedAt);
-        await seedStageDocuments(caseRow, stage, ctx, completedAt);
+        seedStageDocuments(caseRow, stage, ctx, completedAt);
 
         // A return/defer opens the next round; only a terminal outcome stops the walk.
         if (outcome.kind === 'reject' || outcome.kind === 'lapse') break;
@@ -482,6 +507,7 @@ async function seedCases(ctx: WalkCtx) {
     await seedExtras(caseRow, spec, ctx);
   }
 
+  await flushPending();
   return { cases: CASE_SPECS.length, decisions, payments };
 }
 
@@ -632,27 +658,24 @@ async function applyCaseEffects(caseRow: any, stage: StageDef, data: Record<stri
   return prisma.case.update({ where: { id: caseRow.id }, data: update });
 }
 
-async function seedStageDocuments(caseRow: any, stage: StageDef, ctx: WalkCtx, at: Date) {
+function seedStageDocuments(caseRow: any, stage: StageDef, ctx: WalkCtx, at: Date) {
   const types = stage.docTypes.filter((t) => t !== 'Other').slice(0, 2);
   for (const type of types) {
-    const previous = await prisma.document.findFirst({
-      where: { caseId: caseRow.id, type },
-      orderBy: { version: 'desc' },
-    });
-    await prisma.document.create({
-      data: {
+    const versionKey = `${caseRow.id}:${type}`;
+    const version = (docVersions.get(versionKey) ?? 0) + 1;
+    docVersions.set(versionKey, version);
+    pending.documents.push({
         caseId: caseRow.id,
         stageId: stage.id,
         type,
         name: `${type.replace(/[^\w]+/g, '-')}-${caseRow.code.slice(-4)}.pdf`,
-        version: (previous?.version ?? 0) + 1,
+        version,
         fileUrl: ctx.placeholderUrl,
         mimeType: 'application/pdf',
         size: 18_432,
         visibility: stage.ownerRoleKey === ROLES.INVESTOR || stage.coOwnerRole === ROLES.INVESTOR ? 'INVESTOR' : 'INTERNAL',
         uploadedById: actorFor(stage, ctx).id,
         uploadedAt: at,
-      },
     });
   }
 }
@@ -666,7 +689,7 @@ async function seedFinancials(caseRow: any, spec: any, ctx: WalkCtx) {
   let count = 0;
 
   const add = async (row: any) => {
-    await prisma.payment.create({ data: { caseId: caseRow.id, ...row } });
+    pending.payments.push({ caseId: caseRow.id, ...row });
     count += 1;
   };
 
@@ -804,8 +827,7 @@ async function seedExtras(caseRow: any, spec: any, ctx: WalkCtx) {
     for (const [i, [title, actual]] of titles.entries()) {
       const offset = firstMilestoneDaysAgo - i * 90;
       const planned = offset >= 0 ? daysAgo(offset) : daysAhead(-offset);
-      await prisma.constructionMilestone.create({
-        data: {
+      pending.milestones.push({
           caseId: caseRow.id,
           title,
           plannedDate: planned,
@@ -815,7 +837,6 @@ async function seedExtras(caseRow: any, spec: any, ctx: WalkCtx) {
           status: actual >= 100 ? 'COMPLETED' : actual > 0 ? 'IN_PROGRESS' : spec.delayed ? 'DELAYED' : 'PLANNED',
           note: actual > 0 && actual < 100 ? 'Work in progress; monthly report filed.' : '',
           sortOrder: i,
-        },
       });
     }
   }
@@ -885,22 +906,19 @@ async function seedExtras(caseRow: any, spec: any, ctx: WalkCtx) {
 
   // Comments
   for (const cm of spec.comments ?? []) {
-    await prisma.caseComment.create({
-      data: {
+    pending.comments.push({
         caseId: caseRow.id,
         authorId: ctx.users[cm.authorEmail]?.id ?? null,
         body: cm.body,
         visibility: cm.visibility,
         createdAt: daysAgo(cm.daysAgo ?? 10),
-      },
     });
   }
 
   // A notification for the investor so the bell isn't empty.
   const investorId = (await prisma.applicant.findUnique({ where: { id: caseRow.applicantId } }))?.contactUserId;
   if (investorId) {
-    await prisma.notification.create({
-      data: {
+    pending.notifications.push({
         userId: investorId,
         type: 'CASE_UPDATE',
         title: `${caseRow.code} — status update`,
@@ -909,7 +927,6 @@ async function seedExtras(caseRow: any, spec: any, ctx: WalkCtx) {
         link: `/cases/${caseRow.id}`,
         read: Math.random() > 0.6,
         createdAt: daysAgo(Math.floor(Math.random() * 12) + 1),
-      },
     });
   }
 }
