@@ -23,8 +23,10 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  # Prisma must ship the engine that matches the Lambda runtime.
-  PRISMA_CLI_BINARY_TARGETS = "native,rhel-openssl-3.0.x"
+  # NOTE: do not set PRISMA_CLI_BINARY_TARGETS here. That variable overrides the
+  # schema and rejects the value "native", which fails the build with
+  # "Unknown binaryTarget native". The engines are declared in
+  # server/prisma/schema.prisma instead, which does accept "native".
 
 [functions]
   node_bundler = "esbuild"
@@ -37,7 +39,9 @@
   ]
   external_node_modules = ["@prisma/client", ".prisma/client"]
 
-[functions."sweeps-background"]
+# Scheduled function. The "-background" suffix is deliberately NOT used: that
+# is a separate Netlify feature and does not combine with `schedule`.
+[functions."sweeps"]
   # Hourly, matching the interval the long-running server uses.
   schedule = "@hourly"
 

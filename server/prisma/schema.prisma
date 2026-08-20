@@ -8,9 +8,14 @@
 
 generator client {
   provider = "prisma-client-js"
-  // "native" for local development; the rhel target is the engine the Netlify
-  // Function (AWS Lambda, Node 20) needs at runtime.
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  // "native" builds the engine for whatever machine runs `prisma generate`.
+  // The two rhel targets cover the AWS Lambda runtimes behind Netlify Functions:
+  // Amazon Linux 2 ships OpenSSL 1.0.x, Amazon Linux 2023 ships OpenSSL 3.0.x.
+  // Both are included so the function works whichever runtime Netlify assigns.
+  //
+  // These belong here and NOT in the PRISMA_CLI_BINARY_TARGETS environment
+  // variable, which overrides this list and rejects the value "native".
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

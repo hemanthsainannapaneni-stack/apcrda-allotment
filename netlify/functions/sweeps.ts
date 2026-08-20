@@ -5,8 +5,7 @@ import { prisma } from '../../server/src/lib/prisma';
 /**
  * The long-running server runs the time-driven rules on an hourly interval.
  * A serverless deployment has no process to hold that timer, so Netlify's
- * scheduler calls this instead (see the [functions."sweeps"] schedule in
- * netlify.toml).
+ * scheduler calls this instead (see [functions."sweeps"] in netlify.toml).
  *
  * Covers: LOI expiry warnings and lapses, overdue payment penalties,
  * commencement deadlines and breach notices, and SLA breach alerts.
