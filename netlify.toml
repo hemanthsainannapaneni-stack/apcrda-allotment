@@ -8,8 +8,11 @@
 #                         SQLite cannot be used here — a function has no disk.
 #   JWT_ACCESS_SECRET     Long random string.
 #   JWT_REFRESH_SECRET    A different long random string.
-#   NODE_ENV=production
 #   CLIENT_ORIGIN         Your site URL, e.g. https://apcrda-allotment.netlify.app
+#
+# NODE_ENV is optional. If you do set it to "production", leave
+# NPM_CONFIG_PRODUCTION=false below in place, or the build loses the
+# devDependencies it needs (prisma, vite, typescript, tailwind).
 #
 # Before the first deploy, from your machine:
 #   npm run use:postgres
@@ -23,6 +26,10 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # The build needs devDependencies — prisma, vite, typescript, tailwind. npm
+  # omits those when NODE_ENV=production, which is a variable people reasonably
+  # set for the function runtime. This keeps the build working either way.
+  NPM_CONFIG_PRODUCTION = "false"
   # NOTE: do not set PRISMA_CLI_BINARY_TARGETS here. That variable overrides the
   # schema and rejects the value "native", which fails the build with
   # "Unknown binaryTarget native". The engines are declared in
