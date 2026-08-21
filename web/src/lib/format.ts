@@ -33,7 +33,11 @@ export function fmtINR(value?: number | null, opts: { compact?: boolean } = {}) 
 /** Crore / lakh shorthand — how these figures are actually read in India. */
 export function compactIndian(n: number) {
   const abs = Math.abs(n);
-  if (abs >= 1_00_00_000) return `${(n / 1_00_00_000).toFixed(abs >= 1_00_00_00_000 ? 0 : 2)} Cr`;
+  if (abs >= 1_00_00_000) {
+    const cr = n / 1_00_00_000;
+    // Past four digits of crore the decimals stop helping and the grouping starts to.
+    return `${abs >= 1_00_00_00_000 ? Math.round(cr).toLocaleString('en-IN') : cr.toFixed(2)} Cr`;
+  }
   if (abs >= 1_00_000) return `${(n / 1_00_000).toFixed(2)} L`;
   if (abs >= 1_000) return `${(n / 1_000).toFixed(1)} K`;
   return Math.round(n).toLocaleString('en-IN');
