@@ -8,6 +8,8 @@ server/uploads/*
 !server/uploads/.gitkeep
 server/prisma/dev.db
 server/prisma/dev.db-journal
+# Hand-made snapshots taken before a risky migration, e.g. dev.db.backup-before-permits
+server/prisma/dev.db.*
 server/prisma/migrations/dev/
 .DS_Store
 .vite/

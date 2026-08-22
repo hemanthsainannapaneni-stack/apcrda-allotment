@@ -89,19 +89,69 @@ function tally<T, V>(rows: T[], keyOf: (row: T) => string, seed: () => V, fold: 
 
 const desc = <T,>(rows: T[], by: (row: T) => number) => [...rows].sort((a, b) => by(b) - by(a));
 
+/**
+ * The dashboard filters. "ALL" and blanks mean "don't narrow", so the client can
+ * send every key on every request without special-casing the unfiltered view.
+ */
+function readFilters(query: any) {
+  const clean = (v: any) => (typeof v === 'string' && v.trim() && v.trim() !== 'ALL' ? v.trim() : null);
+  return {
+    from: clean(query.from),
+    to: clean(query.to),
+    city: clean(query.city),
+    status: clean(query.status),
+    stage: clean(query.stage),
+    sector: clean(query.sector),
+  };
+}
+
+type Filters = ReturnType<typeof readFilters>;
+
+/**
+ * Filters as a Prisma `where` fragment. This is folded into `baseWhere`, which
+ * every query below already keys off — so one fragment re-scopes the KPIs, the
+ * pipeline, the funnel, the money, and all five charts at once.
+ */
+function caseFilterWhere(f: Filters) {
+  const where: Record<string, unknown> = {};
+  if (f.from || f.to) {
+    const createdAt: Record<string, Date> = {};
+    if (f.from) createdAt.gte = new Date(`${f.from}T00:00:00.000`);
+    if (f.to) createdAt.lte = new Date(`${f.to}T23:59:59.999`);
+    where.createdAt = createdAt;
+  }
+  if (f.status) where.status = f.status;
+  if (f.stage) where.currentStageId = f.stage;
+  if (f.sector) where.sector = f.sector;
+  if (f.city) where.plot = { themeCity: f.city };
+  return where;
+}
+
 dashboardRouter.get(
   '/',
   asyncHandler(async (req, res) => {
     const scope = caseScope(req);
-    const baseWhere = { deletedAt: null, ...scope };
+    const filters = readFilters(req.query);
+    const filtered = Object.values(filters).some(Boolean);
+    const baseWhere = { deletedAt: null, ...scope, ...caseFilterWhere(filters) };
     const now = new Date();
     const staff = !isInvestor(req);
     const stages = await loadStages();
     const months = lastTwelveMonths(now);
     const twelveMonthsAgo = months[0].date;
 
-    const [cases, payments, grievances, cancellations, compliance, milestones, plots, decisions, activeInstances] =
-      await Promise.all([
+    const [
+      cases,
+      payments,
+      grievances,
+      cancellations,
+      compliance,
+      milestones,
+      plots,
+      decisions,
+      activeInstances,
+      instanceCounts,
+    ] = await Promise.all([
         prisma.case.findMany({ where: baseWhere, select: CASE_SELECT }) as unknown as Promise<CaseRow[]>,
         prisma.payment.findMany({
           where: { case: baseWhere },
@@ -117,7 +167,13 @@ dashboardRouter.get(
           },
         }),
         prisma.grievance.findMany({
-          where: isInvestor(req) ? { raisedById: req.user!.id } : {},
+          // Unfiltered, staff still see grievances raised without a case behind
+          // them; once a filter is on, only those on in-scope cases count.
+          where: isInvestor(req)
+            ? { raisedById: req.user!.id }
+            : filtered
+              ? { case: baseWhere }
+              : {},
           select: { category: true, status: true, createdAt: true, resolvedAt: true, slaDueAt: true },
         }),
         prisma.cancellation.findMany({
@@ -131,6 +187,8 @@ dashboardRouter.get(
         prisma.constructionMilestone.groupBy({ by: ['status'], where: { case: baseWhere }, _count: true }),
         staff
           ? prisma.plot.findMany({
+              // Plots hang off no case, so only the parcel filter can narrow them.
+              where: filters.city ? { themeCity: filters.city } : {},
               select: {
                 availability: true,
                 extentAcres: true,
@@ -152,6 +210,12 @@ dashboardRouter.get(
             case: { ...baseWhere, status: { notIn: TERMINAL_STATUSES } },
           },
           select: { stageId: true, startedAt: true, dueAt: true },
+        }),
+        // Every stage record ever opened, live or closed — the pipeline panels count these.
+        prisma.stageInstance.groupBy({
+          by: ['stageId', 'status'],
+          where: { case: baseWhere },
+          _count: true,
         }),
       ]);
 
@@ -273,6 +337,39 @@ dashboardRouter.get(
         };
       })
       .sort((a, b) => a.order - b.order);
+
+    /**
+     * Stage records per step, split by how each one ended. Unlike `byStage`
+     * (where cases are *now*) this counts every attempt at every step, so a
+     * returned round and the re-run that followed it both show up. `total`
+     * leaves out SKIPPED — a step the case never had to take is not work done.
+     */
+    const stageActivity = stages.map((stage) => {
+      const at = (status: string) =>
+        instanceCounts.find((r) => r.stageId === stage.id && r.status === status)?._count ?? 0;
+      const inProgress = at(STAGE_INSTANCE_STATUS.ACTIVE) + at(STAGE_INSTANCE_STATUS.PENDING);
+      const completed = at(STAGE_INSTANCE_STATUS.COMPLETED);
+      const returned = at(STAGE_INSTANCE_STATUS.RETURNED);
+      const rejected = at(STAGE_INSTANCE_STATUS.REJECTED);
+      const deferred = at(STAGE_INSTANCE_STATUS.DEFERRED);
+      const lapsed = at(STAGE_INSTANCE_STATUS.LAPSED);
+      return {
+        stageId: stage.id,
+        code: stage.code,
+        name: stage.name,
+        order: stage.order,
+        phase: stage.phase,
+        optional: stage.optional,
+        inProgress,
+        completed,
+        returned,
+        rejected,
+        deferred,
+        lapsed,
+        skipped: at(STAGE_INSTANCE_STATUS.SKIPPED),
+        total: inProgress + completed + returned + rejected + deferred + lapsed,
+      };
+    });
 
     // -----------------------------------------------------------------------
     // Time series
@@ -556,6 +653,7 @@ dashboardRouter.get(
     res.json({
       generatedAt: now,
       scope: staff ? 'ALL' : 'OWN',
+      filters,
       kpis,
       charts: {
         byStage,
@@ -563,6 +661,7 @@ dashboardRouter.get(
         byPhase,
         funnel,
         agingByStage,
+        stageActivity,
         approvalsOverTime: timeline.map(({ month, label, passed, returned, rejected }) => ({
           month,
           label,

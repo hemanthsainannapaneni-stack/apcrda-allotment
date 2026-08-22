@@ -26,7 +26,7 @@ import {
 } from '../components/ui';
 
 export default function Payments() {
-  const { meta, can, isRole } = useAuth();
+  const { meta, can } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
   const [filters, setFilters] = useState({ status: 'ALL', type: 'ALL', from: '', to: '', page: 1 });
@@ -65,14 +65,7 @@ export default function Payments() {
 
   return (
     <>
-      <PageHeader
-        title="Payments"
-        description={
-          isRole('INVESTOR')
-            ? 'Your payment schedule, dues, and receipts. Penalty accrues on anything overdue.'
-            : `Schedules, reconciliation, penalties, and refunds. Penalty accrues at ${meta?.workflow.penaltyRatePctPerAnnum}% per annum on overdue lines.`
-        }
-      />
+      <PageHeader title="Payments" />
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label="Collected" value={`₹${compactIndian(totals.PAID?.amount ?? 0)}`} tone="success" />

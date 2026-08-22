@@ -108,12 +108,11 @@ export default function NewApplication() {
     <>
       <PageHeader
         breadcrumb={
-          <Link to="/cases" className="inline-flex items-center gap-1 hover:underline">
-            <ArrowLeft className="h-3 w-3" /> All cases
+          <Link to="/applications" className="inline-flex items-center gap-1 hover:underline">
+            <ArrowLeft className="h-3 w-3" /> Applications
           </Link>
         }
         title="New application"
-        description="Creating an application opens a case and starts it at Stage 1 — Registration & Application (fee / EMD)."
       />
 
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">

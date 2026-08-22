@@ -54,7 +54,6 @@ export default function Reports() {
     <>
       <PageHeader
         title="Reports"
-        description="Date-range and filter driven. Every report exports to CSV and PDF."
         actions={
           <>
             <Button variant="outline" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>

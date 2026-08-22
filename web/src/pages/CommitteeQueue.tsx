@@ -3,20 +3,18 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, Gavel } from 'lucide-react';
 import { get, qs } from '../lib/api';
-import { useAuth, useStages } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { compactIndian, fmtDate, humanise, relativeDays } from '../lib/format';
-import { PageHeader } from '../components/Layout';
 import { Badge, Button, Card, CardHeader, EmptyState, Select, Spinner, Table, Td, Th } from '../components/ui';
 
 /**
- * One screen serving every review body — DPR, Economic Development, LASC, GoM,
- * Cabinet Sub-Committee, Authority, Cabinet, Finance, Planning. The queue is
- * derived from the permissions matrix, so it stays correct when an admin
- * re-assigns a stage to a different role.
+ * The review queue — a panel of the Applications module, serving every review
+ * body (DPR, Economic Development, LASC, GoM, Cabinet Sub-Committee, Authority,
+ * Cabinet, Finance, Planning). It is derived from the permissions matrix, so it
+ * stays correct when an admin re-assigns a stage to a different role.
  */
 export default function CommitteeQueue() {
   const { user, meta, isRole } = useAuth();
-  const { byId } = useStages();
   const [roleKey, setRoleKey] = useState(user!.roleKey);
 
   const admin = isRole('SUPER_ADMIN');
@@ -25,44 +23,25 @@ export default function CommitteeQueue() {
     queryFn: () => get(`/dashboard/queue${qs({ roleKey })}`),
   });
 
-  const stagesOwned = (data?.stageIds ?? []).map((id: string) => byId[id]).filter(Boolean);
+  /** Only decides which "queue is clear" wording to show. */
+  const ownsStages = (data?.stageIds ?? []).length > 0;
 
   return (
     <>
-      <PageHeader
-        title="My committee queue"
-        description={
-          admin
-            ? 'As Super Admin you can inspect any body’s queue. Pick a role to see exactly what it is holding.'
-            : `Cases awaiting a decision from ${user?.roleName}${user?.committee ? ` · ${user.committee}` : ''}.`
-        }
-        actions={
-          admin && (
-            <Select
-              value={roleKey}
-              onChange={(e) => setRoleKey(e.target.value)}
-              options={(meta?.roles ?? []).map((r) => ({ value: r.key, label: r.name }))}
-              className="w-64"
-            />
-          )
-        }
-      />
-
-      {stagesOwned.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {stagesOwned.map((s: any) => (
-            <Badge key={s.id} tone="info">
-              Stage {s.code} · {s.name}
-              {s.maxRounds > 1 && ` (${s.roundLabels.join('/')})`}
-            </Badge>
-          ))}
-        </div>
-      )}
-
       <Card>
         <CardHeader
           title="Awaiting decision"
-          subtitle={`${data?.items.length ?? 0} case${data?.items.length === 1 ? '' : 's'} in this queue, oldest due date first`}
+          subtitle={`${data?.items.length ?? 0} application${data?.items.length === 1 ? '' : 's'} in this queue, oldest due date first`}
+          actions={
+            admin && (
+              <Select
+                value={roleKey}
+                onChange={(e) => setRoleKey(e.target.value)}
+                options={(meta?.roles ?? []).map((r) => ({ value: r.key, label: r.name }))}
+                className="w-60"
+              />
+            )
+          }
         />
         {isLoading ? (
           <Spinner />
@@ -71,7 +50,7 @@ export default function CommitteeQueue() {
             icon={<CheckCircle2 className="h-8 w-8" />}
             title="Queue is clear"
             description={
-              stagesOwned.length
+              ownsStages
                 ? 'No case is currently sitting at a stage this role owns.'
                 : 'This role does not own any workflow stage. An admin can grant stage permissions in Settings → Roles & permissions.'
             }

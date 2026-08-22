@@ -323,6 +323,13 @@ model Document {
   uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
   uploadedAt   DateTime @default(now())
 
+  // Scrutiny of the filed document. A fresh version starts at PENDING again,
+  // so an approval never carries over to a drawing nobody has looked at.
+  reviewStatus   String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedAt     DateTime?
+  reviewedByName String    @default("") // display only; the audit log holds the account
+  reviewNote     String    @default("")
+
   @@index([caseId])
 }
 
@@ -429,13 +436,16 @@ model BuildingPermission {
   caseId        String    @unique
   case          Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
   applicationNo String    @default("")
+  applicationDate DateTime?
   proposedFsi   Float     @default(0)
   proposedFar   Float     @default(0)
   builtUpArea   Float     @default(0)
   layoutApproved Boolean  @default(false)
   nocs          String    @default("[]") // JSON {type,status,ref,date}[]
-  status        String    @default("NOT_STARTED") // NOT_STARTED | SUBMITTED | UNDER_SCRUTINY | SANCTIONED | REJECTED
+  status        String    @default("NOT_STARTED") // NOT_STARTED | SUBMITTED | UNDER_SCRUTINY | RETURNED | SANCTIONED | REJECTED
+  sanctionNo    String    @default("")
   sanctionedAt  DateTime?
+  validUntil    DateTime? // permit validity — construction must start before this
   remarks       String    @default("")
   updatedAt     DateTime  @updatedAt
 }

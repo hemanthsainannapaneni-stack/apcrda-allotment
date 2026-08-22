@@ -204,6 +204,7 @@ export const PLAIN_STATUS: Record<string, { label: string; help: string }> = {
   NOT_STARTED: { label: 'Not started', help: '' },
   SUBMITTED: { label: 'Submitted', help: 'Handed in and waiting to be looked at.' },
   UNDER_SCRUTINY: { label: 'Being checked', help: '' },
+  RETURNED: { label: 'Sent back for corrections', help: 'Returned to the applicant to fix and resubmit.' },
   SANCTIONED: { label: 'Approved', help: 'Permission granted.' },
   CLEARED: { label: 'Cleared', help: '' },
   NOT_APPLICABLE: { label: 'Not needed', help: '' },
@@ -323,6 +324,33 @@ export function plainRound(round: number, maxRounds: number) {
   if (maxRounds <= 1) return null;
   return `Attempt ${round + 1} of ${maxRounds}`;
 }
+
+/**
+ * The eighteen steps, gathered into the eight blocks of work people actually
+ * talk about ("it's stuck in LASC", "it's waiting on payment").
+ *
+ * `from` is the step each block opens at; a block runs until the next one
+ * begins, so a step added to the workflow later falls into the block it sits
+ * inside rather than vanishing. Step 0 — publishing the plot — sits before the
+ * first block on purpose: it happens before anyone has applied.
+ */
+export type StageGroup = { key: string; name: string; blurb: string; from: string };
+
+export const STAGE_GROUPS: StageGroup[] = [
+  {
+    key: 'intake',
+    name: 'Applications & eligibility',
+    blurb: 'Application intake and qualification',
+    from: 'S1',
+  },
+  { key: 'dpr', name: 'DPR review', blurb: 'Technical project scrutiny', from: 'S2' },
+  { key: 'economic', name: 'Economic review', blurb: 'Investment, jobs, and sector fit', from: 'S3' },
+  { key: 'lasc', name: 'LASC scrutiny', blurb: 'Site, title, and committee recommendation', from: 'S4' },
+  { key: 'approvals', name: 'Government approvals', blurb: 'GoM, Authority, and Cabinet gates', from: 'S5' },
+  { key: 'order', name: 'Order & offer', blurb: 'Government Order and Letter of Intent', from: 'S8' },
+  { key: 'payment', name: 'Payment & agreement', blurb: 'Financial close and registered agreement', from: 'S10' },
+  { key: 'handover', name: 'Handover & compliance', blurb: 'Possession, construction, and closure', from: 'S12A' },
+];
 
 /** Phase names people can hold in their head. */
 export const PLAIN_PHASE: Record<string, { name: string; blurb: string }> = {

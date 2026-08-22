@@ -28,20 +28,20 @@ export const USER_SEED = [
 const cr = (n: number) => n * 10_000_000; // ₹ crore → rupees
 
 export const PLOT_SEED = [
-  { code: 'KC-01', name: 'Knowledge City Parcel A', extentAcres: 18.5, surveyRef: 'Sy.No. 214/1, Thullur', gisRef: '16.5183,80.5150', zoneCode: 'KC-R1', themeCity: 'Knowledge City', landUse: 'Institutional', fsi: 3.5, far: 3.5, reservePrice: cr(4.2), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'KC-02', name: 'Knowledge City Parcel B', extentAcres: 32.0, surveyRef: 'Sy.No. 218/3, Thullur', gisRef: '16.5201,80.5188', zoneCode: 'KC-R2', themeCity: 'Knowledge City', landUse: 'Institutional', fsi: 3.0, far: 3.0, reservePrice: cr(3.9), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'EC-01', name: 'Electronics City Block 1', extentAcres: 45.0, surveyRef: 'Sy.No. 96/2, Nelapadu', gisRef: '16.5310,80.4980', zoneCode: 'EC-I1', themeCity: 'Electronics City', landUse: 'Industrial', fsi: 2.5, far: 2.5, reservePrice: cr(3.1), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'EC-02', name: 'Electronics City Block 2', extentAcres: 12.4, surveyRef: 'Sy.No. 101/1, Nelapadu', gisRef: '16.5322,80.5011', zoneCode: 'EC-I2', themeCity: 'Electronics City', landUse: 'Industrial', fsi: 2.5, far: 2.5, reservePrice: cr(3.4), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'FC-01', name: 'Financial District Tower Plot 1', extentAcres: 6.8, surveyRef: 'Sy.No. 42/5, Venkatapalem', gisRef: '16.5089,80.5262', zoneCode: 'FC-C1', themeCity: 'Financial City', landUse: 'Commercial', fsi: 6.0, far: 6.0, reservePrice: cr(12.5), objectiveCategory: 'REVENUE_MAXIMISATION', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'FC-02', name: 'Financial District Tower Plot 2', extentAcres: 9.2, surveyRef: 'Sy.No. 44/1, Venkatapalem', gisRef: '16.5095,80.5290', zoneCode: 'FC-C2', themeCity: 'Financial City', landUse: 'Mixed Use', fsi: 5.5, far: 5.5, reservePrice: cr(11.0), objectiveCategory: 'REVENUE_MAXIMISATION', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'HC-01', name: 'Health City Hospital Parcel', extentAcres: 27.5, surveyRef: 'Sy.No. 158/2, Ainavolu', gisRef: '16.5410,80.4890', zoneCode: 'HC-I1', themeCity: 'Health City', landUse: 'Institutional', fsi: 3.0, far: 3.0, reservePrice: cr(2.8), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'SC-01', name: 'Sports City Stadium Parcel', extentAcres: 54.0, surveyRef: 'Sy.No. 305/1, Malkapuram', gisRef: '16.4980,80.5401', zoneCode: 'SC-R1', themeCity: 'Sports City', landUse: 'Recreational', fsi: 1.5, far: 1.5, reservePrice: cr(1.9), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'SENSITIVE', availability: 'AVAILABLE', notes: 'Adjoins the Krishna river buffer; irrigation NOC mandatory.' },
-  { code: 'MC-01', name: 'Media City Studio Parcel', extentAcres: 15.0, surveyRef: 'Sy.No. 77/4, Rayapudi', gisRef: '16.5150,80.5520', zoneCode: 'MC-C1', themeCity: 'Media City', landUse: 'Commercial', fsi: 4.0, far: 4.0, reservePrice: cr(5.6), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'JC-01', name: 'Justice City Chambers Parcel', extentAcres: 8.3, surveyRef: 'Sy.No. 11/2, Nekkallu', gisRef: '16.5260,80.5610', zoneCode: 'JC-P1', themeCity: 'Justice City', landUse: 'Public / Semi-Public', fsi: 3.0, far: 3.0, reservePrice: cr(2.2), objectiveCategory: 'INFRASTRUCTURE', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'TC-01', name: 'Tourism City Riverfront Parcel', extentAcres: 22.0, surveyRef: 'Sy.No. 260/1, Undavalli', gisRef: '16.4930,80.5720', zoneCode: 'TC-R1', themeCity: 'Tourism City', landUse: 'Mixed Use', fsi: 2.0, far: 2.0, reservePrice: cr(6.4), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'SENSITIVE', availability: 'AVAILABLE', notes: 'Riverfront parcel; CRZ-equivalent state clearance required.' },
-  { code: 'GC-01', name: 'Government City Office Parcel', extentAcres: 11.6, surveyRef: 'Sy.No. 3/1, Velagapudi', gisRef: '16.5145,80.5185', zoneCode: 'GC-P1', themeCity: 'Government City', landUse: 'Public / Semi-Public', fsi: 4.0, far: 4.0, reservePrice: cr(3.0), objectiveCategory: 'INFRASTRUCTURE', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'EC-03', name: 'Electronics City Ancillary Block', extentAcres: 7.4, surveyRef: 'Sy.No. 104/6, Nelapadu', gisRef: '16.5335,80.5040', zoneCode: 'EC-I3', themeCity: 'Electronics City', landUse: 'Industrial', fsi: 2.0, far: 2.0, reservePrice: cr(2.9), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
-  { code: 'KC-03', name: 'Knowledge City Skilling Parcel', extentAcres: 5.2, surveyRef: 'Sy.No. 220/7, Thullur', gisRef: '16.5215,80.5205', zoneCode: 'KC-R3', themeCity: 'Knowledge City', landUse: 'Institutional', fsi: 3.0, far: 3.0, reservePrice: cr(3.6), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'KC-01', code: 'LPS-04/THU/B12/P045', name: 'Knowledge City Parcel A', extentAcres: 18.5, surveyRef: 'Sy.No. 214/1, Thullur', gisRef: '16.5183,80.5150', zoneCode: 'KC-R1', themeCity: 'Knowledge City', landUse: 'Institutional', fsi: 3.5, far: 3.5, reservePrice: cr(4.2), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'KC-02', code: 'LPS-04/THU/B12/P046', name: 'Knowledge City Parcel B', extentAcres: 32.0, surveyRef: 'Sy.No. 218/3, Thullur', gisRef: '16.5201,80.5188', zoneCode: 'KC-R2', themeCity: 'Knowledge City', landUse: 'Institutional', fsi: 3.0, far: 3.0, reservePrice: cr(3.9), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'EC-01', code: 'LPS-07/NLP/B03/P018', name: 'Electronics City Block 1', extentAcres: 45.0, surveyRef: 'Sy.No. 96/2, Nelapadu', gisRef: '16.5310,80.4980', zoneCode: 'EC-I1', themeCity: 'Electronics City', landUse: 'Industrial', fsi: 2.5, far: 2.5, reservePrice: cr(3.1), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'EC-02', code: 'LPS-07/NLP/B03/P019', name: 'Electronics City Block 2', extentAcres: 12.4, surveyRef: 'Sy.No. 101/1, Nelapadu', gisRef: '16.5322,80.5011', zoneCode: 'EC-I2', themeCity: 'Electronics City', landUse: 'Industrial', fsi: 2.5, far: 2.5, reservePrice: cr(3.4), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'FC-01', code: 'LPS-02/VKP/B21/P204', name: 'Financial District Tower Plot 1', extentAcres: 6.8, surveyRef: 'Sy.No. 42/5, Venkatapalem', gisRef: '16.5089,80.5262', zoneCode: 'FC-C1', themeCity: 'Financial City', landUse: 'Commercial', fsi: 6.0, far: 6.0, reservePrice: cr(12.5), objectiveCategory: 'REVENUE_MAXIMISATION', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'FC-02', code: 'LPS-02/VKP/B21/P205', name: 'Financial District Tower Plot 2', extentAcres: 9.2, surveyRef: 'Sy.No. 44/1, Venkatapalem', gisRef: '16.5095,80.5290', zoneCode: 'FC-C2', themeCity: 'Financial City', landUse: 'Mixed Use', fsi: 5.5, far: 5.5, reservePrice: cr(11.0), objectiveCategory: 'REVENUE_MAXIMISATION', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'HC-01', code: 'LPS-11/AIN/B08/P131', name: 'Health City Hospital Parcel', extentAcres: 27.5, surveyRef: 'Sy.No. 158/2, Ainavolu', gisRef: '16.5410,80.4890', zoneCode: 'HC-I1', themeCity: 'Health City', landUse: 'Institutional', fsi: 3.0, far: 3.0, reservePrice: cr(2.8), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'SC-01', code: 'LPS-15/MLK/B02/P009', name: 'Sports City Stadium Parcel', extentAcres: 54.0, surveyRef: 'Sy.No. 305/1, Malkapuram', gisRef: '16.4980,80.5401', zoneCode: 'SC-R1', themeCity: 'Sports City', landUse: 'Recreational', fsi: 1.5, far: 1.5, reservePrice: cr(1.9), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'SENSITIVE', availability: 'AVAILABLE', notes: 'Adjoins the Krishna river buffer; irrigation NOC mandatory.' },
+  { key: 'MC-01', code: 'LPS-06/RYP/B17/P088', name: 'Media City Studio Parcel', extentAcres: 15.0, surveyRef: 'Sy.No. 77/4, Rayapudi', gisRef: '16.5150,80.5520', zoneCode: 'MC-C1', themeCity: 'Media City', landUse: 'Commercial', fsi: 4.0, far: 4.0, reservePrice: cr(5.6), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'JC-01', code: 'LPS-09/NKL/B06/P052', name: 'Justice City Chambers Parcel', extentAcres: 8.3, surveyRef: 'Sy.No. 11/2, Nekkallu', gisRef: '16.5260,80.5610', zoneCode: 'JC-P1', themeCity: 'Justice City', landUse: 'Public / Semi-Public', fsi: 3.0, far: 3.0, reservePrice: cr(2.2), objectiveCategory: 'INFRASTRUCTURE', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'TC-01', code: 'LPS-18/UND/B01/P003', name: 'Tourism City Riverfront Parcel', extentAcres: 22.0, surveyRef: 'Sy.No. 260/1, Undavalli', gisRef: '16.4930,80.5720', zoneCode: 'TC-R1', themeCity: 'Tourism City', landUse: 'Mixed Use', fsi: 2.0, far: 2.0, reservePrice: cr(6.4), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'SENSITIVE', availability: 'AVAILABLE', notes: 'Riverfront parcel; CRZ-equivalent state clearance required.' },
+  { key: 'GC-01', code: 'LPS-01/VLG/B01/P001', name: 'Government City Office Parcel', extentAcres: 11.6, surveyRef: 'Sy.No. 3/1, Velagapudi', gisRef: '16.5145,80.5185', zoneCode: 'GC-P1', themeCity: 'Government City', landUse: 'Public / Semi-Public', fsi: 4.0, far: 4.0, reservePrice: cr(3.0), objectiveCategory: 'INFRASTRUCTURE', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'EC-03', code: 'LPS-07/NLP/B05/P067', name: 'Electronics City Ancillary Block', extentAcres: 7.4, surveyRef: 'Sy.No. 104/6, Nelapadu', gisRef: '16.5335,80.5040', zoneCode: 'EC-I3', themeCity: 'Electronics City', landUse: 'Industrial', fsi: 2.0, far: 2.0, reservePrice: cr(2.9), objectiveCategory: 'ECONOMIC_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
+  { key: 'KC-03', code: 'LPS-04/THU/B14/P112', name: 'Knowledge City Skilling Parcel', extentAcres: 5.2, surveyRef: 'Sy.No. 220/7, Thullur', gisRef: '16.5215,80.5205', zoneCode: 'KC-R3', themeCity: 'Knowledge City', landUse: 'Institutional', fsi: 3.0, far: 3.0, reservePrice: cr(3.6), objectiveCategory: 'SOCIAL_DEVELOPMENT', landCategory: 'NORMAL', availability: 'AVAILABLE', notes: '' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ export const APPLICANT_SEED = [
 export type CaseSpec = {
   title: string;
   applicantKey: string;
-  plotCode?: string;
+  plotKey?: string;
   year: number;
   mode: string;
   objectiveCategory: string;
@@ -110,7 +110,7 @@ export const CASE_SPECS: CaseSpec[] = [
   // --- Phase A ---
   {
     title: 'IT development centre — Knowledge City Parcel A',
-    applicantKey: 'vajra', plotCode: 'KC-01', year: 2026,
+    applicantKey: 'vajra', plotKey: 'KC-01', year: 2026,
     mode: 'QUALITY_CUM_PRICE', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Information Technology',
     investmentAmount: cr(680), jobsCommitted: 4200, holdingType: 'LEASEHOLD',
     startedDaysAgo: 22, stopAt: 'S1', plotStatus: 'RESERVED',
@@ -119,7 +119,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Regional broadcast & post-production campus — Media City',
-    applicantKey: 'kaveri-media', plotCode: 'MC-01', year: 2026,
+    applicantKey: 'kaveri-media', plotKey: 'MC-01', year: 2026,
     mode: 'PUBLIC_AUCTION', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Media & Entertainment',
     investmentAmount: cr(310), jobsCommitted: 900, holdingType: 'FREEHOLD',
     startedDaysAgo: 41, stopAt: 'S1A', plotStatus: 'RESERVED',
@@ -129,7 +129,7 @@ export const CASE_SPECS: CaseSpec[] = [
   // --- Phase B ---
   {
     title: 'Electronics manufacturing cluster — Block 1',
-    applicantKey: 'bharat-elec', plotCode: 'EC-01', year: 2026,
+    applicantKey: 'bharat-elec', plotKey: 'EC-01', year: 2026,
     mode: 'NOMINATION', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Electronics Manufacturing',
     investmentAmount: cr(1450), jobsCommitted: 6800, holdingType: 'LEASEHOLD', isConcessional: true,
     startedDaysAgo: 96, stopAt: 'S2',
@@ -137,7 +137,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Warehousing & cold-chain hub — Electronics City Ancillary',
-    applicantKey: 'deccan-log', plotCode: 'EC-03', year: 2026,
+    applicantKey: 'deccan-log', plotKey: 'EC-03', year: 2026,
     mode: 'PUBLIC_TENDER', objectiveCategory: 'INFRASTRUCTURE', sector: 'Logistics & Warehousing',
     investmentAmount: cr(120), jobsCommitted: 380, holdingType: 'LEASEHOLD',
     startedDaysAgo: 130, stopAt: 'S2', rounds: { S2: 1 }, overdue: true, overdueBy: 12,
@@ -145,14 +145,14 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Skilling academy & incubation centre — Knowledge City',
-    applicantKey: 'global-skills', plotCode: 'KC-03', year: 2026,
+    applicantKey: 'global-skills', plotKey: 'KC-03', year: 2026,
     mode: 'QUALITY_BASED', objectiveCategory: 'SOCIAL_DEVELOPMENT', sector: 'Education & Skilling',
     investmentAmount: cr(210), jobsCommitted: 640, holdingType: 'LEASEHOLD',
     startedDaysAgo: 118, stopAt: 'S3',
   },
   {
     title: 'Multi-speciality hospital — Health City',
-    applicantKey: 'nirmaan', plotCode: 'HC-01', year: 2026,
+    applicantKey: 'nirmaan', plotKey: 'HC-01', year: 2026,
     mode: 'QUALITY_BASED', objectiveCategory: 'SOCIAL_DEVELOPMENT', sector: 'Healthcare & Life Sciences',
     investmentAmount: cr(540), jobsCommitted: 1900, holdingType: 'LEASEHOLD',
     startedDaysAgo: 176, stopAt: 'S4', rounds: { S4: 2 },
@@ -161,7 +161,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Integrated sports complex & academy — Sports City',
-    applicantKey: 'sunrise-sports', plotCode: 'SC-01', year: 2025,
+    applicantKey: 'sunrise-sports', plotKey: 'SC-01', year: 2025,
     mode: 'NOMINATION', objectiveCategory: 'SOCIAL_DEVELOPMENT', sector: 'Sports & Recreation',
     investmentAmount: cr(390), jobsCommitted: 720, holdingType: 'LEASEHOLD', isConcessional: true,
     startedDaysAgo: 212, stopAt: 'S5', rounds: { S5: 1 },
@@ -169,14 +169,14 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Judicial chambers & records complex — Justice City',
-    applicantKey: 'ap-judicial', plotCode: 'JC-01', year: 2025,
+    applicantKey: 'ap-judicial', plotKey: 'JC-01', year: 2025,
     mode: 'NOMINATION', objectiveCategory: 'INFRASTRUCTURE', sector: 'Legal & Judiciary',
     investmentAmount: cr(160), jobsCommitted: 240, holdingType: 'LEASEHOLD', isConcessional: true,
     startedDaysAgo: 238, stopAt: 'S5A',
   },
   {
     title: 'Financial services back-office tower — Financial District',
-    applicantKey: 'sristi-fin', plotCode: 'FC-01', year: 2025,
+    applicantKey: 'sristi-fin', plotKey: 'FC-01', year: 2025,
     mode: 'PUBLIC_AUCTION', objectiveCategory: 'REVENUE_MAXIMISATION', sector: 'Financial Services',
     investmentAmount: cr(890), jobsCommitted: 3100, holdingType: 'FREEHOLD',
     startedDaysAgo: 254, stopAt: 'S6',
@@ -184,7 +184,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Riverfront convention & hospitality district — Tourism City',
-    applicantKey: 'krishna-hosp', plotCode: 'TC-01', year: 2025,
+    applicantKey: 'krishna-hosp', plotKey: 'TC-01', year: 2025,
     mode: 'QUALITY_CUM_PRICE', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Tourism & Hospitality',
     investmentAmount: cr(720), jobsCommitted: 1600, holdingType: 'LEASEHOLD',
     startedDaysAgo: 286, stopAt: 'S7',
@@ -192,7 +192,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Higher education campus — Knowledge City Parcel B',
-    applicantKey: 'amaravati-edu', plotCode: 'KC-02', year: 2025,
+    applicantKey: 'amaravati-edu', plotKey: 'KC-02', year: 2025,
     mode: 'QUALITY_BASED', objectiveCategory: 'SOCIAL_DEVELOPMENT', sector: 'Education & Skilling',
     investmentAmount: cr(430), jobsCommitted: 850, holdingType: 'LEASEHOLD',
     startedDaysAgo: 262, stopAt: 'S4', terminal: 'REJECTED',
@@ -208,7 +208,7 @@ export const CASE_SPECS: CaseSpec[] = [
   // --- Phase C ---
   {
     title: 'Data centre & cloud campus — Electronics City Block 2',
-    applicantKey: 'vajra', plotCode: 'EC-02', year: 2025,
+    applicantKey: 'vajra', plotKey: 'EC-02', year: 2025,
     mode: 'QUALITY_CUM_PRICE', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Information Technology',
     investmentAmount: cr(560), jobsCommitted: 1100, holdingType: 'LEASEHOLD',
     startedDaysAgo: 318, stopAt: 'S9',
@@ -217,7 +217,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Mixed-use commercial tower — Financial District Plot 2',
-    applicantKey: 'sagara', plotCode: 'FC-02', year: 2025,
+    applicantKey: 'sagara', plotKey: 'FC-02', year: 2025,
     mode: 'PUBLIC_AUCTION', objectiveCategory: 'REVENUE_MAXIMISATION', sector: 'Financial Services',
     investmentAmount: cr(1120), jobsCommitted: 2400, holdingType: 'FREEHOLD',
     startedDaysAgo: 344, stopAt: 'S9', terminal: 'LAPSED', plotStatus: 'AVAILABLE',
@@ -225,7 +225,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Corporate headquarters & training centre — Government City',
-    applicantKey: 'sristi-fin', plotCode: 'GC-01', year: 2025,
+    applicantKey: 'sristi-fin', plotKey: 'GC-01', year: 2025,
     mode: 'PUBLIC_TENDER', objectiveCategory: 'INFRASTRUCTURE', sector: 'Public Administration',
     investmentAmount: cr(340), jobsCommitted: 620, holdingType: 'LEASEHOLD',
     startedDaysAgo: 372, stopAt: 'S10', overduePayment: true, overdueInstalment: 1,
@@ -234,21 +234,21 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Specialty oncology block — Health City (Phase II)',
-    applicantKey: 'nirmaan', plotCode: 'KC-03', year: 2025,
+    applicantKey: 'nirmaan', plotKey: 'KC-03', year: 2025,
     mode: 'QUALITY_BASED', objectiveCategory: 'SOCIAL_DEVELOPMENT', sector: 'Healthcare & Life Sciences',
     investmentAmount: cr(295), jobsCommitted: 780, holdingType: 'LEASEHOLD',
     startedDaysAgo: 398, stopAt: 'S11', scheduleStartDaysAgo: 190,
   },
   {
     title: 'Broadcast tower & uplink facility — Media City (Phase II)',
-    applicantKey: 'kaveri-media', plotCode: 'MC-01', year: 2024,
+    applicantKey: 'kaveri-media', plotKey: 'MC-01', year: 2024,
     mode: 'QUALITY_CUM_PRICE', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Media & Entertainment',
     investmentAmount: cr(185), jobsCommitted: 410, holdingType: 'LEASEHOLD',
     startedDaysAgo: 430, stopAt: 'S12', scheduleStartDaysAgo: 210, agreementDaysAgo: 60,
   },
   {
     title: 'Logistics park & container yard — Electronics City',
-    applicantKey: 'deccan-log', plotCode: 'EC-03', year: 2024,
+    applicantKey: 'deccan-log', plotKey: 'EC-03', year: 2024,
     mode: 'PUBLIC_TENDER', objectiveCategory: 'INFRASTRUCTURE', sector: 'Logistics & Warehousing',
     investmentAmount: cr(150), jobsCommitted: 460, holdingType: 'LEASEHOLD',
     startedDaysAgo: 452, stopAt: 'S12A', scheduleStartDaysAgo: 230, agreementDaysAgo: 95,
@@ -265,7 +265,7 @@ export const CASE_SPECS: CaseSpec[] = [
   // --- Phase D ---
   {
     title: 'IT SEZ campus — Knowledge City Parcel A (Phase II)',
-    applicantKey: 'vajra', plotCode: 'KC-01', year: 2024,
+    applicantKey: 'vajra', plotKey: 'KC-01', year: 2024,
     mode: 'QUALITY_CUM_PRICE', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Information Technology',
     investmentAmount: cr(760), jobsCommitted: 5200, holdingType: 'LEASEHOLD',
     startedDaysAgo: 486, stopAt: 'S13', scheduleStartDaysAgo: 250, agreementDaysAgo: 140,
@@ -273,7 +273,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Hospitality & convention centre — Tourism City (Phase I)',
-    applicantKey: 'krishna-hosp', plotCode: 'TC-01', year: 2024,
+    applicantKey: 'krishna-hosp', plotKey: 'TC-01', year: 2024,
     mode: 'QUALITY_CUM_PRICE', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Tourism & Hospitality',
     investmentAmount: cr(620), jobsCommitted: 1400, holdingType: 'LEASEHOLD',
     startedDaysAgo: 512, stopAt: 'S14', scheduleStartDaysAgo: 270, agreementDaysAgo: 180,
@@ -297,7 +297,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Stadium & training academy — Sports City (Phase I)',
-    applicantKey: 'sunrise-sports', plotCode: 'SC-01', year: 2024,
+    applicantKey: 'sunrise-sports', plotKey: 'SC-01', year: 2024,
     mode: 'NOMINATION', objectiveCategory: 'SOCIAL_DEVELOPMENT', sector: 'Sports & Recreation',
     investmentAmount: cr(410), jobsCommitted: 690, holdingType: 'LEASEHOLD', isConcessional: true,
     startedDaysAgo: 548, stopAt: 'S15', scheduleStartDaysAgo: 300, agreementDaysAgo: 400,
@@ -313,7 +313,7 @@ export const CASE_SPECS: CaseSpec[] = [
   },
   {
     title: 'Enterprise campus — Electronics City Block 1 (completed)',
-    applicantKey: 'sagara', plotCode: 'EC-01', year: 2024,
+    applicantKey: 'sagara', plotKey: 'EC-01', year: 2024,
     mode: 'PUBLIC_TENDER', objectiveCategory: 'ECONOMIC_DEVELOPMENT', sector: 'Electronics Manufacturing',
     investmentAmount: cr(980), jobsCommitted: 3400, holdingType: 'LEASEHOLD',
     startedDaysAgo: 574, stopAt: 'S15', terminal: 'COMPLETED',

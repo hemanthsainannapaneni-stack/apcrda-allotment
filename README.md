@@ -230,9 +230,9 @@ Verification, R1, outcome RECOMMEND". It is just no longer the only thing on scr
 | Case management | List with search + 10 filters, case detail with stage stepper, active-stage panel, documents, payments, grievances, cancellation, notes, activity |
 | Applications & eligibility | Investor application form, applicant profiles, eligibility checklist and mode selector at Stage 1a |
 | Financial / payments | Schedule generation, receipts, dues, penalty accrual, refund/forfeiture calculator, Finance reconciliation |
-| Committee & review workspaces | One queue screen driven by the permissions matrix — serves DPR, Eco Dev, LASC, GoM, Sub-Committee, Authority, Cabinet, Finance, Planning |
-| Land inventory (Stage 0) | Plot registry with extent, survey/GIS ref, zone, land use, FSI/FAR, reserve price, objective, availability; invitation documents |
-| Building & construction (13–15) | Permission checklist with statutory NOCs, milestone tracking (planned vs actual), compliance status, show-cause notice + cure period |
+| Applications module | One module, three tabs — every application, new arrivals awaiting eligibility, and the review queue driven by the permissions matrix (serving DPR, Eco Dev, LASC, GoM, Sub-Committee, Authority, Cabinet, Finance, Planning) |
+| Land inventory (Stage 0) | Plot registry keyed by Amaravati LPS plot number (scheme / village / block / plot), with extent, survey and GIS reference, zone, land use, FSI/FAR, reserve price, objective, availability; a map view plotting each parcel on the Amaravati capital region to its real extent; invitation documents |
+| Building permits (13–15) | Permit application and scrutiny, sanction number and validity, statutory NOC checklist, the submitted document set (plans, architectural/structural/MEP drawings, BIM model, soil and fire reports), permit fees raised and collected, plus milestone tracking, compliance status and show-cause notice + cure period |
 | Grievances & appeals | Raise, assign, track, resolve; SLA timers; register with filters |
 | Reports & exports | 7 standard reports, date-range and filter driven, CSV + PDF export |
 | Notifications | In-app centre with unread badge; email logs to the API console in the demo |

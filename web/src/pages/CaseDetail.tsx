@@ -65,8 +65,8 @@ export default function CaseDetail() {
     <>
       <PageHeader
         breadcrumb={
-          <Link to="/cases" className="inline-flex items-center gap-1 hover:underline">
-            <ArrowLeft className="h-3 w-3" /> All cases
+          <Link to="/applications" className="inline-flex items-center gap-1 hover:underline">
+            <ArrowLeft className="h-3 w-3" /> Applications
           </Link>
         }
         title={

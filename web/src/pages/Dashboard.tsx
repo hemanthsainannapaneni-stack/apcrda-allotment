@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   Bar,
   BarChart,
@@ -14,23 +14,30 @@ import {
   YAxis,
 } from 'recharts';
 import {
-  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
   Banknote,
+  Building2,
+  CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   FileStack,
   Gavel,
   HardHat,
+  IndianRupee,
   LandPlot,
-  TimerReset,
+  ListChecks,
+  Search,
   TrendingUp,
+  Users,
+  X,
 } from 'lucide-react';
-import { get } from '../lib/api';
+import { get, qs } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { compactIndian, firstName, fmtDate, fmtNumber, humanise, relativeDays } from '../lib/format';
-import { PLAIN_PHASE, plainStage, plainStatus } from '../lib/plain';
-import { AXIS, AXIS_LINE, BAR_SIZE, CHROME, ORDINAL, SERIES, STACK_GAP, STATUS } from '../lib/viz';
-import { PageHeader } from '../components/Layout';
+import { PLAIN_PHASE, STAGE_GROUPS, plainStage, plainStatus } from '../lib/plain';
+import { AXIS, AXIS_LINE, BAR_SIZE, CHROME, SERIES, STACK_GAP, STATUS } from '../lib/viz';
 import {
   BAR_CURSOR,
   ChartCard,
@@ -63,26 +70,117 @@ const inr = (n: number) => `₹${compactIndian(Number(n) || 0)}`;
 const count = (n: number) => fmtNumber(Number(n) || 0);
 /** Axis ticks round to clean numbers — "₹80 Cr", never "₹80.00 Cr" wrapping onto two lines. */
 const axisMoney = (n: number) => (n === 0 ? '0' : `₹${compactIndian(Number(n) || 0).replace(/\.\d+/, '')}`);
-const sum = (rows: any[], key: string) => rows.reduce((s, r) => s + (Number(r[key]) || 0), 0);
-const pick = (rows: any[], keyField: string, value: string, valueField: string) =>
-  Number(rows.find((r) => r[keyField] === value)?.[valueField]) || 0;
 
 const ACTIVE_DOT = { r: 4, strokeWidth: 2, stroke: CHROME.surface } as const;
 
-const TREND_WINDOWS = [
-  { key: '12', label: '12M' },
-  { key: '6', label: '6M' },
-  { key: '3', label: '3M' },
+/** One icon per block of work, in the order the blocks run. */
+const GROUP_ICON: Record<string, ReactNode> = {
+  intake: <FileStack className="h-5 w-5" />,
+  dpr: <ClipboardList className="h-5 w-5" />,
+  economic: <TrendingUp className="h-5 w-5" />,
+  lasc: <Gavel className="h-5 w-5" />,
+  approvals: <CheckCircle2 className="h-5 w-5" />,
+  order: <FileStack className="h-5 w-5" />,
+  payment: <Banknote className="h-5 w-5" />,
+  handover: <HardHat className="h-5 w-5" />,
+};
+
+/** The trend series the API sends, and the window the charts read. */
+const TREND_MONTHS = 12;
+
+const greetingFor = (h: number) => (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
+
+const NO_FILTERS = { date: 'ALL', city: 'ALL', status: 'ALL', stage: 'ALL', sector: 'ALL' };
+
+const DATE_PRESETS = [
+  { value: '30D', label: 'Last 30 days' },
+  { value: '90D', label: 'Last 90 days' },
+  { value: '12M', label: 'Last 12 months' },
+  { value: 'FY', label: 'This financial year' },
 ];
+
+/**
+ * A date preset as the {from, to} the API filters on. Built from local date
+ * parts, so "today" means the user's today rather than UTC's — a case filed
+ * this evening in IST must not fall outside "last 30 days".
+ */
+function dateRange(key: string, fiscalStart = '04-01') {
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date();
+  const daysBack = (days: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - days);
+    return d;
+  };
+  switch (key) {
+    case '30D':
+      return { from: iso(daysBack(30)) };
+    case '90D':
+      return { from: iso(daysBack(90)) };
+    case '12M':
+      return { from: iso(daysBack(365)) };
+    case 'FY': {
+      const [m, d] = fiscalStart.split('-').map(Number);
+      const start = new Date(now.getFullYear(), (m || 4) - 1, d || 1);
+      if (start > now) start.setFullYear(start.getFullYear() - 1);
+      return { from: iso(start) };
+    }
+    default:
+      return {};
+  }
+}
+
+/** "Saturday, 22 August 2026" — the long form, since the band has room for it. */
+const longDate = (d: Date) =>
+  `${d.toLocaleDateString('en-GB', { weekday: 'long' })}, ${d.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })}`;
+
+/**
+ * Month-on-month change from one of the monthly series, as a whole percent.
+ * Returns null when there is no usable history — a card shows no delta at all
+ * rather than a made-up one.
+ */
+function momChange(series: any[] | undefined, pick: (row: any) => number) {
+  if (!series || series.length < 2) return null;
+  const prev = pick(series[series.length - 2]);
+  const last = pick(series[series.length - 1]);
+  if (!prev) return null;
+  return Math.round(((last - prev) / prev) * 100);
+}
 
 export default function Dashboard() {
   const { user, isRole, meta } = useAuth();
-  const [trendWindow, setTrendWindow] = useState('12');
+  const navigate = useNavigate();
   const [tab, setTab] = useState('cases');
 
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const setFilter = (key: keyof typeof NO_FILTERS) => (value: string) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+  const filtered = Object.values(filters).some((v) => v !== 'ALL');
+
+  /**
+   * The filters go to the server, not the browser: every figure below is a
+   * server-side aggregate, so narrowing has to happen where the aggregate is
+   * built. keepPreviousData holds the last dashboard on screen while the next
+   * one loads, so changing a chip never flashes the page back to a spinner.
+   */
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: () => get('/dashboard'),
+    queryKey: ['dashboard', filters],
+    queryFn: () =>
+      get(
+        `/dashboard${qs({
+          ...dateRange(filters.date, meta?.organisation?.fiscalYearStart),
+          city: filters.city,
+          status: filters.status,
+          stage: filters.stage,
+          sector: filters.sector,
+        })}`
+      ),
+    placeholderData: keepPreviousData,
   });
 
   /**
@@ -103,8 +201,7 @@ export default function Dashboard() {
     return (value: string) => map.get(value) ?? humanise(value);
   }, [meta]);
 
-  const months = Number(trendWindow);
-  const trim = <T,>(series: T[] = []) => series.slice(-months);
+  const trim = <T,>(series: T[] = []) => series.slice(-TREND_MONTHS);
 
   if (isLoading) return <Spinner label="Building your dashboard…" />;
   if (error) return <ErrorState error={error} onRetry={refetch} />;
@@ -112,246 +209,313 @@ export default function Dashboard() {
   const k = data.kpis;
   const c = data.charts;
   const investor = isRole('INVESTOR');
+  /** Staff-only in the payload, so every read of it has to tolerate null. */
   const land = c.landInventory;
+  const availablePlots =
+    land?.byAvailability?.find((a: any) => a.availability === 'AVAILABLE')?.count ?? 0;
 
-  // ---- The figures the panels are built from -------------------------------
-  const notProceeding = k.rejected + k.lapsedLois + k.cancellations;
-  const onTime = Math.max(0, k.activeCases - k.overdueCases);
-  const decisions = {
-    passed: sum(c.approvalsOverTime, 'passed'),
-    returned: sum(c.approvalsOverTime, 'returned'),
-    rejected: sum(c.approvalsOverTime, 'rejected'),
-  };
-  const decisionTotal = decisions.passed + decisions.returned + decisions.rejected;
-  const money = {
-    paid: pick(c.paymentsByStatus, 'status', 'PAID', 'amount'),
-    pending: pick(c.paymentsByStatus, 'status', 'PENDING', 'amount'),
-    overdue: pick(c.paymentsByStatus, 'status', 'OVERDUE', 'amount'),
-  };
-  const atRisk =
-    pick(c.complianceByStatus, 'status', 'AT_RISK', 'count') +
-    pick(c.complianceByStatus, 'status', 'BREACH_NOTICE', 'count') +
-    pick(c.complianceByStatus, 'status', 'CURE_PERIOD', 'count');
-  const delayedMilestones = pick(c.milestonesByStatus, 'status', 'DELAYED', 'count');
-  const watchTotal = k.openGrievances + atRisk + k.recentCancellations + k.lapsedLois;
-  const avgPerCase = k.totalCases ? k.totalInvestment / k.totalCases : 0;
-
-  const phaseParts: PanelPart[] = c.byPhase.map((p: any, i: number) => ({
-    label: PLAIN_PHASE[p.phase]?.name ?? `Phase ${p.phase}`,
-    value: p.live,
-    fill: ORDINAL[Math.min(i, ORDINAL.length - 1)],
-  }));
+  // ---- The eight blocks of work the panels are built from -------------------
+  const blocks = groupStages(c.stageActivity ?? []);
 
   return (
     <>
-      <PageHeader
-        title={`Good day, ${firstName(user?.name)}`}
-        description={
-          investor
-            ? 'Your applications, what each one is waiting on, and the next action expected from you.'
-            : k.pendingOnMe > 0
-              ? `${k.pendingOnMe} case${k.pendingOnMe === 1 ? '' : 's'} ${k.pendingOnMe === 1 ? 'is' : 'are'} waiting for you to look at.`
-              : 'Nothing is waiting for you right now.'
-        }
-        actions={
-          <div className="flex items-center gap-3">
-            <span className="hidden text-[11px] text-ink-400 lg:block">
-              {isFetching ? 'Refreshing…' : `As at ${fmtDate(data.generatedAt)}`}
-            </span>
-            {investor ? (
-              <Link to="/cases/new">
-                <Button icon={<ClipboardList className="h-4 w-4" />}>New application</Button>
-              </Link>
-            ) : (
-              <Link to="/queue">
-                <Button variant="outline">
-                  Waiting on me
-                  {k.pendingOnMe > 0 && (
-                    <span className="rounded-full bg-navy-100 px-1.5 text-[11px] font-bold text-navy-800">
-                      {k.pendingOnMe}
-                    </span>
-                  )}
-                </Button>
-              </Link>
-            )}
-          </div>
-        }
-      />
-
       {/* ------------------------------------------------------------------ */}
-      {/* Everything at a glance. Eight panels, one whole question each.      */}
+      {/* Greeting band — the page's h1 and the date on the left, the filters */}
+      {/* on the right. Every chip re-queries the dashboard, so the figures   */}
+      {/* and all five charts below always describe the same slice.          */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-        <StatPanel
-          icon={<FileStack className="h-5 w-5" />}
-          title={investor ? 'My applications' : 'Applications'}
-          value={k.totalCases}
-          parts={[
-            { label: 'In progress', value: k.activeCases, tone: 'navy', to: '/cases?active=true' },
-            { label: 'Finished', value: k.completed, tone: 'good' },
-            { label: 'Did not proceed', value: notProceeding, tone: 'critical' },
-          ]}
-        />
-
-        <StatPanel
-          icon={<TrendingUp className="h-5 w-5" />}
-          title="Live cases"
-          subtitle="How far each one has got"
-          value={k.activeCases}
-          parts={phaseParts}
-        />
-
-        <StatPanel
-          icon={<TimerReset className="h-5 w-5" />}
-          title="Kept to time"
-          subtitle={
-            k.avgCycleDays ? `${count(k.avgCycleDays)} days on average from application to closure` : undefined
-          }
-          value={`${k.onTimeRate}%`}
-          tone={k.overdueCases > 0 ? 'warning' : 'good'}
-          parts={[
-            { label: 'Inside their SLA', value: onTime, tone: 'good' },
-            { label: 'Running late', value: k.overdueCases, tone: 'critical', to: '/cases?overdue=true' },
-            {
-              label: 'Waiting on you',
-              value: k.pendingOnMe,
-              tone: k.pendingOnMe ? 'navy' : 'muted',
-              pct: false,
-              aside: true,
-              to: '/queue',
-            },
-          ]}
-        />
-
-        <StatPanel
-          icon={<Gavel className="h-5 w-5" />}
-          title="Decisions"
-          subtitle="Recorded at every gate in the last 12 months"
-          value={decisionTotal}
-          parts={[
-            { label: 'Passed', value: decisions.passed, tone: 'good' },
-            { label: 'Sent back', value: decisions.returned, tone: 'warning' },
-            { label: 'Refused', value: decisions.rejected, tone: 'critical' },
-          ]}
-        />
-
-        <StatPanel
-          icon={<Banknote className="h-5 w-5" />}
-          title="Billed"
-          subtitle={`${k.collectionRate}% of everything raised has been collected`}
-          value={inr(k.billed)}
-          tone={money.overdue > 0 ? 'warning' : 'navy'}
-          parts={[
-            { label: 'Collected', value: money.paid, display: inr(money.paid), tone: 'good' },
-            { label: 'Not yet due', value: money.pending, display: inr(money.pending), tone: 'navy' },
-            { label: 'Overdue', value: money.overdue, display: inr(money.overdue), tone: 'critical', to: '/payments' },
-          ]}
-        />
-
-        <StatPanel
-          icon={<ClipboardList className="h-5 w-5" />}
-          title="Committed"
-          subtitle="What the approved plans promise to deliver"
-          value={inr(k.totalInvestment)}
-          parts={[
-            { label: 'Jobs promised', value: k.totalJobs, display: count(k.totalJobs), pct: false, aside: true },
-            {
-              label: 'Land taken up',
-              value: k.totalAcres,
-              display: `${count(k.totalAcres)} ac`,
-              pct: false,
-              aside: true,
-            },
-            { label: 'Average per case', value: avgPerCase, display: inr(avgPerCase), pct: false, aside: true },
-          ]}
-        />
-
-        {land ? (
-          <StatPanel
-            icon={<LandPlot className="h-5 w-5" />}
-            title="Plot register"
-            subtitle={`${count(land.totalPlots)} plots on the books`}
-            value={`${count(land.totalAcres)} ac`}
-            badge={
-              <Link to="/plots" className="text-[11px] font-semibold text-navy-700 hover:underline">
-                Open
-              </Link>
-            }
-            parts={land.byAvailability.slice(0, 4).map((a: any, i: number) => ({
-              label: plainStatus(a.availability).label,
-              value: a.acres,
-              display: `${count(a.acres)} ac`,
-              fill: ORDINAL[Math.min(i, ORDINAL.length - 1)],
-            }))}
-          />
-        ) : (
-          <StatPanel
-            icon={<HardHat className="h-5 w-5" />}
-            title="Construction"
-            subtitle="Progress against the milestones you agreed"
-            value={sum(c.milestonesByStatus, 'count')}
-            tone={delayedMilestones ? 'warning' : 'navy'}
-            parts={c.milestonesByStatus.slice(0, 4).map((m: any) => ({
-              label: plainStatus(m.status).label,
-              value: m.count,
-              tone:
-                m.status === 'COMPLETED'
-                  ? ('good' as const)
-                  : m.status === 'DELAYED'
-                    ? ('critical' as const)
-                    : m.status === 'IN_PROGRESS'
-                      ? ('navy' as const)
-                      : ('muted' as const),
-            }))}
-          />
-        )}
-
-        <StatPanel
-          icon={<AlertTriangle className="h-5 w-5" />}
-          title="Watch list"
-          subtitle="Raised against an allotment, or going off plan"
-          value={watchTotal}
-          tone={watchTotal > 0 ? 'critical' : 'good'}
-          parts={[
-            { label: 'Open complaints', value: k.openGrievances, tone: 'warning', to: '/grievances' },
-            { label: 'Terms at risk', value: atRisk, tone: 'critical' },
-            { label: 'Cancellations', value: k.recentCancellations, tone: 'warning' },
-            { label: 'Offers expired', value: k.lapsedLois, tone: 'muted', to: '/cases?status=LAPSED' },
-          ]}
-        />
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Five tiles, and only five — the questions numbers alone can't answer */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="mb-3 mt-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-ink-900">Trends and bottlenecks</h2>
-          <p className="mt-0.5 text-xs text-ink-500">
-            Where cases pile up, what gets decided, and how the money comes in.
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-navy-100 bg-navy-50 px-4 py-2.5">
+        <div className="min-w-0">
+          <h1 className="text-base font-bold text-navy-900">
+            {greetingFor(new Date().getHours())}, {firstName(user?.name)} <span aria-hidden>👋</span>
+          </h1>
+          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-500">
+            <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+            {longDate(new Date())}
+            {isFetching && <span className="text-ink-400">· Refreshing…</span>}
           </p>
         </div>
-        <div className="no-print flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Trend window</span>
-          <div className="flex rounded-md border border-ink-200 bg-white p-0.5">
-            {TREND_WINDOWS.map((w) => (
-              <button
-                key={w.key}
-                onClick={() => setTrendWindow(w.key)}
-                aria-pressed={trendWindow === w.key}
-                className={cn(
-                  'rounded px-2.5 py-1 text-xs font-semibold transition-colors',
-                  trendWindow === w.key ? 'bg-navy-100 text-navy-800' : 'text-ink-500 hover:text-ink-700'
-                )}
-              >
-                {w.label}
-              </button>
-            ))}
-          </div>
+
+        <div className="no-print flex flex-wrap items-center justify-end gap-1.5">
+          {/* The portal-wide search, now that there is no top bar to hold it.
+              It hands off to Applications, which owns the actual result list. */}
+          <form
+            className="relative"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = new FormData(e.currentTarget).get('q');
+              navigate(`/applications?q=${encodeURIComponent(String(q ?? ''))}`);
+            }}
+          >
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-ink-400" />
+            <input
+              name="q"
+              aria-label="Search cases, companies and plots"
+              placeholder="Search…"
+              className="h-7 w-36 rounded-full border border-ink-200 bg-white pl-7 pr-2.5 text-[11px] font-semibold text-ink-700 outline-none transition-[width] placeholder:font-normal placeholder:text-ink-400 focus:w-52 focus:ring-2 focus:ring-navy-300"
+            />
+          </form>
+          <FilterChip
+            icon={<CalendarDays className="h-3 w-3" />}
+            label="Date"
+            allLabel="Any date"
+            value={filters.date}
+            onChange={setFilter('date')}
+            options={DATE_PRESETS}
+          />
+          <FilterChip
+            icon={<LandPlot className="h-3 w-3" />}
+            label="Parcels"
+            allLabel="Parcels"
+            value={filters.city}
+            onChange={setFilter('city')}
+            options={(meta?.themeCities ?? []).map((c: string) => ({ value: c, label: c }))}
+          />
+          <FilterChip
+            icon={<FileStack className="h-3 w-3" />}
+            label="Applications"
+            allLabel="Applications"
+            value={filters.status}
+            onChange={setFilter('status')}
+            options={(meta?.caseStatuses ?? []).map((s: string) => ({ value: s, label: plainStatus(s).label }))}
+          />
+          <FilterChip
+            icon={<ListChecks className="h-3 w-3" />}
+            label="Stages"
+            allLabel="Stages"
+            value={filters.stage}
+            onChange={setFilter('stage')}
+            options={(meta?.stages ?? []).map((s: any) => ({ value: s.id, label: `${s.code} · ${s.name}` }))}
+          />
+          <FilterChip
+            icon={<Building2 className="h-3 w-3" />}
+            label="Projects"
+            allLabel="Projects"
+            value={filters.sector}
+            onChange={setFilter('sector')}
+            options={(meta?.sectors ?? []).map((s: string) => ({ value: s, label: s }))}
+          />
+          {filtered && (
+            <button
+              onClick={() => setFilters(NO_FILTERS)}
+              className="flex items-center gap-1 rounded-full px-2 py-1.5 text-xs font-semibold text-ink-500 hover:bg-white hover:text-ink-700"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear
+            </button>
+          )}
+          {investor && (
+            <Link to="/cases/new">
+              <Button size="sm" icon={<ClipboardList className="h-4 w-4" />}>
+                New application
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      {/* ------------------------------------------------------------------ */}
+      {/* The portfolio in five figures. Deltas are real month-on-month       */}
+      {/* movements, and are simply absent where there is no series to read.  */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-5">
+        <HeroStat
+          icon={<FileStack className="h-5 w-5" />}
+          tint="bg-teal-600"
+          label="Total applications"
+          value={count(k.totalCases)}
+          hint={`${count(k.activeCases)} live`}
+          delta={momChange(c.caseFlowOverTime, (m) => m.opened)}
+        />
+        <HeroStat
+          icon={<LandPlot className="h-5 w-5" />}
+          tint="bg-emerald-600"
+          label="Land parcels"
+          value={land ? count(land.totalPlots) : '—'}
+          hint={land ? `${count(availablePlots)} available` : 'Not visible to your role'}
+        />
+        <HeroStat
+          icon={<IndianRupee className="h-5 w-5" />}
+          tint="bg-violet-600"
+          label="Revenue"
+          value={inr(k.collected)}
+          hint={k.duesCount > 0 ? `${count(k.duesCount)} overdue` : 'Nothing overdue'}
+          hintTone={k.duesCount > 0 ? 'bad' : undefined}
+          delta={momChange(c.collectionsOverTime, (m) => m.collected)}
+        />
+        <HeroStat
+          icon={<HardHat className="h-5 w-5" />}
+          tint="bg-orange-500"
+          label="Active projects"
+          value={count(k.activeCases)}
+          hint={`${count(k.openGrievances)} grievance${k.openGrievances === 1 ? '' : 's'}`}
+          hintTone={k.openGrievances > 0 ? 'bad' : undefined}
+        />
+        <HeroStat
+          icon={<Users className="h-5 w-5" />}
+          tint="bg-navy-600"
+          label="Jobs generated"
+          value={count(k.totalJobs)}
+          hint="Direct & indirect"
+        />
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Everything at a glance. Eight blocks of work, one panel each.       */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+        {blocks.map((b) => (
+          <StatPanel
+            key={b.key}
+            icon={GROUP_ICON[b.key]}
+            title={b.name}
+            subtitle={b.blurb}
+            value={b.total}
+            badge={<span className="whitespace-nowrap text-[11px] text-ink-400">stage records</span>}
+            parts={b.parts}
+          />
+        ))}
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Five tiles, and only five — the questions numbers alone can't answer. */}
+      {/* No heading and no window picker: the trends run the full twelve      */}
+      {/* months, and the Date chip in the band above is what narrows them.    */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="mt-3 grid gap-4 xl:grid-cols-3">
+        <ChartCard
+          title="Decisions recorded"
+          subtitle={`Passed, sent back, and refused, last ${TREND_MONTHS} months`}
+          height={210}
+          table={{
+            headers: ['Month', 'Passed', 'Sent back', 'Refused'],
+            rows: trim<any>(c.approvalsOverTime).map((m: any) => [
+              m.label,
+              count(m.passed),
+              count(m.returned),
+              count(m.rejected),
+            ]),
+          }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trim<any>(c.approvalsOverTime)} margin={{ left: -20, right: 12, top: 8, bottom: 4 }}>
+              <CartesianGrid stroke={CHROME.grid} vertical={false} />
+              <XAxis dataKey="label" tick={AXIS} axisLine={AXIS_LINE} tickLine={false} minTickGap={14} />
+              <YAxis allowDecimals={false} tick={AXIS} axisLine={false} tickLine={false} />
+              <Tooltip cursor={LINE_CURSOR} content={<VizTooltip format={(v) => count(v)} />} />
+              <Legend iconSize={8} wrapperStyle={LEGEND_STYLE} formatter={legendText} />
+              <Line
+                type="linear"
+                dataKey="passed"
+                name="Passed"
+                stroke={STATUS.good}
+                strokeWidth={2}
+                dot={false}
+                activeDot={ACTIVE_DOT}
+                isAnimationActive={false}
+              />
+              <Line
+                type="linear"
+                dataKey="returned"
+                name="Sent back"
+                stroke={STATUS.warning}
+                strokeWidth={2}
+                dot={false}
+                activeDot={ACTIVE_DOT}
+                isAnimationActive={false}
+              />
+              <Line
+                type="linear"
+                dataKey="rejected"
+                name="Refused"
+                stroke={STATUS.critical}
+                strokeWidth={2}
+                dot={false}
+                activeDot={ACTIVE_DOT}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard
+          title="Money in each month"
+          subtitle={`Collected against billed, last ${TREND_MONTHS} months`}
+          height={210}
+          table={{
+            headers: ['Month', 'Billed', 'Collected'],
+            rows: trim<any>(c.collectionsOverTime).map((m: any) => [m.label, inr(m.raised), inr(m.collected)]),
+          }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={trim<any>(c.collectionsOverTime)} margin={{ left: 0, right: 8, top: 8, bottom: 4 }}>
+              <CartesianGrid stroke={CHROME.grid} vertical={false} />
+              <XAxis dataKey="label" tick={AXIS} axisLine={AXIS_LINE} tickLine={false} minTickGap={14} />
+              <YAxis tick={AXIS} axisLine={false} tickLine={false} tickFormatter={axisMoney} width={58} />
+              <Tooltip cursor={BAR_CURSOR} content={<VizTooltip format={(v) => inr(v)} />} />
+              <Legend iconSize={8} wrapperStyle={LEGEND_STYLE} formatter={legendText} />
+              <Bar
+                dataKey="raised"
+                name="Billed"
+                fill={SERIES[0]}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={12}
+                isAnimationActive={false}
+              />
+              <Bar
+                dataKey="collected"
+                name="Collected"
+                fill={SERIES[1]}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={12}
+                isAnimationActive={false}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard
+          title="Investment by sector"
+          subtitle="Committed rupees, largest first"
+          height={210}
+          table={{
+            headers: ['Sector', 'Cases', 'Investment', 'Jobs', 'Acres'],
+            rows: c.bySector.map((r: any) => [r.key, count(r.count), inr(r.investment), count(r.jobs), count(r.acres)]),
+          }}
+          footnote={c.bySector.length > 5 ? `Top 5 of ${c.bySector.length} — the table view has them all.` : undefined}
+        >
+          {c.bySector.length === 0 ? (
+            <NoData />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart layout="vertical" data={c.bySector.slice(0, 5)} margin={{ left: 4, right: 72, top: 4, bottom: 4 }}>
+                <CartesianGrid stroke={CHROME.grid} horizontal={false} />
+                <XAxis type="number" tick={AXIS} axisLine={AXIS_LINE} tickLine={false} tickFormatter={axisMoney} />
+                <YAxis type="category" dataKey="key" width={108} tick={AXIS} axisLine={false} tickLine={false} />
+                <Tooltip
+                  cursor={BAR_CURSOR}
+                  content={
+                    <VizTooltip
+                      format={(v, entry) =>
+                        `${inr(v)} · ${count(entry.payload.count)} case${entry.payload.count === 1 ? '' : 's'}`
+                      }
+                    />
+                  }
+                />
+                <Bar
+                  dataKey="investment"
+                  name="Investment"
+                  fill={SERIES[0]}
+                  radius={[0, 4, 4, 0]}
+                  maxBarSize={BAR_SIZE}
+                  isAnimationActive={false}
+                  label={{ position: 'right', fontSize: 10, fill: CHROME.ink, formatter: (v: any) => inr(Number(v)) }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
         <ChartCard
           title="Where live cases are waiting"
           subtitle="Cases at each step, split by whether they are still inside their SLA"
@@ -436,139 +600,6 @@ export default function Dashboard() {
             }))}
           />
         </ChartCard>
-
-        <ChartCard
-          title="Decisions recorded"
-          subtitle={`Passed, sent back, and refused, last ${months} months`}
-          height={210}
-          table={{
-            headers: ['Month', 'Passed', 'Sent back', 'Refused'],
-            rows: trim<any>(c.approvalsOverTime).map((m: any) => [
-              m.label,
-              count(m.passed),
-              count(m.returned),
-              count(m.rejected),
-            ]),
-          }}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trim<any>(c.approvalsOverTime)} margin={{ left: -20, right: 12, top: 8, bottom: 4 }}>
-              <CartesianGrid stroke={CHROME.grid} vertical={false} />
-              <XAxis dataKey="label" tick={AXIS} axisLine={AXIS_LINE} tickLine={false} minTickGap={14} />
-              <YAxis allowDecimals={false} tick={AXIS} axisLine={false} tickLine={false} />
-              <Tooltip cursor={LINE_CURSOR} content={<VizTooltip format={(v) => count(v)} />} />
-              <Legend iconSize={8} wrapperStyle={LEGEND_STYLE} formatter={legendText} />
-              <Line
-                type="linear"
-                dataKey="passed"
-                name="Passed"
-                stroke={STATUS.good}
-                strokeWidth={2}
-                dot={false}
-                activeDot={ACTIVE_DOT}
-                isAnimationActive={false}
-              />
-              <Line
-                type="linear"
-                dataKey="returned"
-                name="Sent back"
-                stroke={STATUS.warning}
-                strokeWidth={2}
-                dot={false}
-                activeDot={ACTIVE_DOT}
-                isAnimationActive={false}
-              />
-              <Line
-                type="linear"
-                dataKey="rejected"
-                name="Refused"
-                stroke={STATUS.critical}
-                strokeWidth={2}
-                dot={false}
-                activeDot={ACTIVE_DOT}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard
-          title="Money in each month"
-          subtitle={`Collected against billed, last ${months} months`}
-          height={210}
-          table={{
-            headers: ['Month', 'Billed', 'Collected'],
-            rows: trim<any>(c.collectionsOverTime).map((m: any) => [m.label, inr(m.raised), inr(m.collected)]),
-          }}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trim<any>(c.collectionsOverTime)} margin={{ left: 0, right: 8, top: 8, bottom: 4 }}>
-              <CartesianGrid stroke={CHROME.grid} vertical={false} />
-              <XAxis dataKey="label" tick={AXIS} axisLine={AXIS_LINE} tickLine={false} minTickGap={14} />
-              <YAxis tick={AXIS} axisLine={false} tickLine={false} tickFormatter={axisMoney} width={58} />
-              <Tooltip cursor={BAR_CURSOR} content={<VizTooltip format={(v) => inr(v)} />} />
-              <Legend iconSize={8} wrapperStyle={LEGEND_STYLE} formatter={legendText} />
-              <Bar
-                dataKey="raised"
-                name="Billed"
-                fill={SERIES[0]}
-                radius={[4, 4, 0, 0]}
-                maxBarSize={12}
-                isAnimationActive={false}
-              />
-              <Bar
-                dataKey="collected"
-                name="Collected"
-                fill={SERIES[1]}
-                radius={[4, 4, 0, 0]}
-                maxBarSize={12}
-                isAnimationActive={false}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard
-          title="Investment by sector"
-          subtitle="Committed rupees, largest first"
-          height={210}
-          table={{
-            headers: ['Sector', 'Cases', 'Investment', 'Jobs', 'Acres'],
-            rows: c.bySector.map((r: any) => [r.key, count(r.count), inr(r.investment), count(r.jobs), count(r.acres)]),
-          }}
-          footnote={c.bySector.length > 5 ? `Top 5 of ${c.bySector.length} — the table view has them all.` : undefined}
-        >
-          {c.bySector.length === 0 ? (
-            <NoData />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={c.bySector.slice(0, 5)} margin={{ left: 4, right: 72, top: 4, bottom: 4 }}>
-                <CartesianGrid stroke={CHROME.grid} horizontal={false} />
-                <XAxis type="number" tick={AXIS} axisLine={AXIS_LINE} tickLine={false} tickFormatter={axisMoney} />
-                <YAxis type="category" dataKey="key" width={108} tick={AXIS} axisLine={false} tickLine={false} />
-                <Tooltip
-                  cursor={BAR_CURSOR}
-                  content={
-                    <VizTooltip
-                      format={(v, entry) =>
-                        `${inr(v)} · ${count(entry.payload.count)} case${entry.payload.count === 1 ? '' : 's'}`
-                      }
-                    />
-                  }
-                />
-                <Bar
-                  dataKey="investment"
-                  name="Investment"
-                  fill={SERIES[0]}
-                  radius={[0, 4, 4, 0]}
-                  maxBarSize={BAR_SIZE}
-                  isAnimationActive={false}
-                  label={{ position: 'right', fontSize: 10, fill: CHROME.ink, formatter: (v: any) => inr(Number(v)) }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
       </div>
 
       {/* ------------------------------------------------------------------ */}
@@ -578,7 +609,7 @@ export default function Dashboard() {
           subtitle="Oldest first. Click a case to open it and record your decision."
           actions={
             data.myTasks.length > 0 && (
-              <Link to="/queue">
+              <Link to="/applications/queue">
                 <Button variant="ghost" size="sm">
                   View all {data.myTasks.length}
                 </Button>
@@ -915,6 +946,70 @@ const investorColumns = (label: (v: string) => string): Column<any>[] => [
 ];
 
 // ---------------------------------------------------------------------------
+// The eight blocks of work
+// ---------------------------------------------------------------------------
+
+type StageStep = {
+  stageId: string;
+  order: number;
+  inProgress: number;
+  completed: number;
+  returned: number;
+  rejected: number;
+  deferred: number;
+  lapsed: number;
+  total: number;
+};
+
+type StageBlock = {
+  key: string;
+  name: string;
+  blurb: string;
+  total: number;
+  parts: PanelPart[];
+};
+
+/**
+ * Folds the per-step record counts into the eight blocks. Each block opens at
+ * its `from` step and runs until the next one starts, so the walk needs the
+ * steps in workflow order — and a step added to the workflow later lands in the
+ * block it sits inside instead of disappearing.
+ */
+function groupStages(activity: StageStep[]): StageBlock[] {
+  const ordered = [...activity].sort((a, b) => a.order - b.order);
+  const buckets = STAGE_GROUPS.map((g) => ({ ...g, steps: [] as StageStep[] }));
+  let current: (typeof buckets)[number] | undefined;
+
+  for (const step of ordered) {
+    current = buckets.find((b) => b.from === step.stageId) ?? current;
+    // Steps before the first block — the plot going on offer — belong to none.
+    current?.steps.push(step);
+  }
+
+  return buckets.map((b) => {
+    const add = (key: keyof StageStep) => b.steps.reduce((s, step) => s + (step[key] as number), 0);
+    const deferred = add('deferred');
+    const expired = add('lapsed');
+
+    const parts: PanelPart[] = [
+      {
+        label: b.steps.length > 1 ? `In progress across ${b.steps.length} steps` : 'In progress',
+        value: add('inProgress'),
+        tone: 'navy',
+      },
+      { label: 'Approved / completed', value: add('completed'), tone: 'good' },
+      { label: 'Sent for revision', value: add('returned'), tone: 'warning' },
+      { label: 'Rejected', value: add('rejected'), tone: 'critical' },
+    ];
+    // Only two blocks can end this way, so the column is earned rather than padded.
+    if (deferred > 0) parts.push({ label: 'Deferred', value: deferred, tone: 'warning' });
+    if (expired > 0) parts.push({ label: 'Expired', value: expired, tone: 'warning' });
+
+    return { key: b.key, name: b.name, blurb: b.blurb, total: add('total'), parts };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Small pieces
 // ---------------------------------------------------------------------------
 
@@ -925,6 +1020,104 @@ function stageIdFor(task: { stageCode: string }) {
 
 function NoData({ message = 'Nothing to show yet.' }: { message?: string }) {
   return <div className="flex h-full items-center justify-center text-xs text-ink-400">{message}</div>;
+}
+
+/**
+ * One filter chip. A real <select> under chip styling rather than a custom
+ * popup, so keyboard, screen readers, and the native mobile picker all work
+ * without being reimplemented. It carries the accent border while it is
+ * narrowing something, which is what makes an active filter visible at a glance.
+ */
+function FilterChip({
+  icon,
+  label,
+  allLabel,
+  value,
+  onChange,
+  options,
+}: {
+  icon: ReactNode;
+  label: string;
+  allLabel: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const on = value !== 'ALL';
+  return (
+    <label
+      className={cn(
+        'relative flex h-7 items-center gap-1 rounded-full border pl-2.5 pr-5 text-[11px] font-semibold shadow-card transition-colors focus-within:ring-2 focus-within:ring-navy-300',
+        on ? 'border-navy-300 bg-white text-navy-800' : 'border-ink-200 bg-white text-ink-600'
+      )}
+    >
+      <span className={cn('shrink-0', on ? 'text-navy-600' : 'text-ink-400')}>{icon}</span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="max-w-[6.5rem] cursor-pointer appearance-none truncate bg-transparent text-[11px] font-semibold outline-none"
+      >
+        <option value="ALL">{allLabel}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className={cn('pointer-events-none absolute right-1.5 h-3 w-3', on ? 'text-navy-500' : 'text-ink-400')}
+      />
+    </label>
+  );
+}
+
+/**
+ * A headline figure for the top strip: a filled icon tile, the number, and a
+ * one-line footnote. `delta` is a real month-on-month percentage or null —
+ * there is deliberately no way to pass a decorative one.
+ */
+function HeroStat({
+  icon,
+  tint,
+  label,
+  value,
+  hint,
+  hintTone,
+  delta,
+}: {
+  icon: ReactNode;
+  tint: string;
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  hintTone?: 'bad';
+  delta?: number | null;
+}) {
+  const up = (delta ?? 0) >= 0;
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-ink-200 bg-white p-3.5 shadow-card">
+      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white', tint)}>
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-ink-500">{label}</p>
+        <p className="text-xl font-bold tabular-nums text-ink-900">{value}</p>
+        {(hint || delta != null) && (
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px]">
+            {hint && <span className={hintTone === 'bad' ? 'text-red-600' : 'text-ink-500'}>{hint}</span>}
+            {delta != null && (
+              <span className={cn('flex items-center font-semibold', up ? 'text-emerald-600' : 'text-red-600')}>
+                {up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                {up ? '+' : ''}
+                {delta}%
+              </span>
+            )}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function MixTable({ title, headers, rows }: { title: string; headers: string[]; rows: (string | number)[][] }) {

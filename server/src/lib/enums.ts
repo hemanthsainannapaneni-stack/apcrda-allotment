@@ -179,8 +179,16 @@ export const DOCUMENT_TYPES = [
   'Registered Deed',
   'Possession Certificate',
   'Building Plans',
+  'Architectural Drawings',
+  'Structural Drawings',
+  'Services Drawings (MEP)',
+  'BIM Model',
+  'Site / Layout Plan',
+  'Soil Investigation Report',
+  'Fire Safety Plan',
   'Statutory NOC',
   'Building Permission Order',
+  'Occupancy Certificate',
   'Progress Photograph',
   'Utilisation Certificate',
   'Completion Certificate',
@@ -188,6 +196,44 @@ export const DOCUMENT_TYPES = [
   'Show-Cause Notice',
   'Other',
 ];
+
+/**
+ * The document set a building-permit application is assessed on. `SUBMITTED`
+ * comes from the applicant and gates the scrutiny; `ISSUED` is what APCRDA puts
+ * back on the file once the permit is sanctioned.
+ */
+export const PERMIT_DOCUMENT_TYPES: {
+  type: string;
+  kind: 'SUBMITTED' | 'ISSUED';
+  required: boolean;
+  /** One line saying what the document actually is, for the enclosures list. */
+  description: string;
+}[] = [
+  { type: 'Building Plans', kind: 'SUBMITTED', required: true, description: 'Construction plan package' },
+  { type: 'Architectural Drawings', kind: 'SUBMITTED', required: true, description: 'Elevations, sections and floor plans' },
+  { type: 'Structural Drawings', kind: 'SUBMITTED', required: true, description: 'Framing, foundation and load design' },
+  { type: 'Site / Layout Plan', kind: 'SUBMITTED', required: true, description: 'Setbacks, access and site layout' },
+  { type: 'Services Drawings (MEP)', kind: 'SUBMITTED', required: false, description: 'Mechanical, electrical and plumbing' },
+  { type: 'BIM Model', kind: 'SUBMITTED', required: false, description: 'Building information model' },
+  { type: 'Soil Investigation Report', kind: 'SUBMITTED', required: false, description: 'Geotechnical investigation report' },
+  { type: 'Fire Safety Plan', kind: 'SUBMITTED', required: false, description: 'Fire safety and evacuation plan' },
+  { type: 'Statutory NOC', kind: 'SUBMITTED', required: true, description: 'Clearances from other departments' },
+  { type: 'Building Permission Order', kind: 'ISSUED', required: false, description: 'The sanctioned permission order' },
+  { type: 'Occupancy Certificate', kind: 'ISSUED', required: false, description: 'Issued once the building is fit for use' },
+];
+
+/** Scrutiny outcome for a filed document. */
+export const DOCUMENT_REVIEW_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
+
+/** Where a building-permit application can sit. */
+export const PERMIT_STATUSES = [
+  'NOT_STARTED',
+  'SUBMITTED',
+  'UNDER_SCRUTINY',
+  'RETURNED',
+  'SANCTIONED',
+  'REJECTED',
+] as const;
 
 export const NOC_TYPES = [
   'Fire Services',
@@ -207,9 +253,24 @@ export const PAYMENT_TYPES = [
   { value: 'INSTALMENT', label: 'Instalment' },
   { value: 'STAMP_DUTY', label: 'Stamp Duty' },
   { value: 'REGISTRATION_CHARGE', label: 'Registration Charges' },
+  { value: 'PERMIT_SCRUTINY_FEE', label: 'Permit Scrutiny Fee' },
+  { value: 'DEVELOPMENT_CHARGE', label: 'Development Charges' },
+  { value: 'BETTERMENT_CHARGE', label: 'Betterment Charges' },
+  { value: 'LABOUR_CESS', label: 'Labour Cess' },
   { value: 'PENALTY', label: 'Penalty' },
   { value: 'REFUND', label: 'Refund' },
 ];
+
+/**
+ * The fee lines a building permit attracts. The permits desk raises these
+ * demands itself; Finance still reconciles the receipt in the payments module.
+ */
+export const PERMIT_PAYMENT_TYPES = [
+  'PERMIT_SCRUTINY_FEE',
+  'DEVELOPMENT_CHARGE',
+  'BETTERMENT_CHARGE',
+  'LABOUR_CESS',
+] as string[];
 
 export const PHASES = [
   { value: 'A', label: 'Phase A — Inventory & Intake' },

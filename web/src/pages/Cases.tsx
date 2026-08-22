@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { FileStack, Filter, Plus, RotateCcw } from 'lucide-react';
+import { FileStack, Filter, RotateCcw } from 'lucide-react';
 import { get, qs } from '../lib/api';
 import { useAuth, useStages } from '../lib/auth';
 import { compactIndian, fmtDate, humanise } from '../lib/format';
 import { plainStage, plainStatus } from '../lib/plain';
-import { PageHeader } from '../components/Layout';
 import {
   Badge,
   Button,
@@ -23,9 +22,16 @@ import {
   Th,
 } from '../components/ui';
 
-export default function Cases({ lockPhase }: { lockPhase?: string }) {
+/**
+ * The searchable list of applications — a panel of the Applications module,
+ * which owns the page header. `lockPhase` pins it to one part of the process
+ * (Phase A for the "New applications" tab); `lockStatus` pins it to one or more
+ * statuses, comma-separated (the "Cancellations" tab). A pinned filter drops its
+ * own control from the panel, so the tab cannot be filtered out from under you.
+ */
+export default function CaseList({ lockPhase, lockStatus }: { lockPhase?: string; lockStatus?: string }) {
   const [params, setParams] = useSearchParams();
-  const { meta, can } = useAuth();
+  const { meta } = useAuth();
   const { list: stages } = useStages();
   const [showFilters, setShowFilters] = useState(false);
 
@@ -34,7 +40,7 @@ export default function Cases({ lockPhase }: { lockPhase?: string }) {
       q: params.get('q') ?? '',
       stageId: params.get('stageId') ?? 'ALL',
       phase: lockPhase ?? params.get('phase') ?? 'ALL',
-      status: params.get('status') ?? 'ALL',
+      status: lockStatus ?? params.get('status') ?? 'ALL',
       mode: params.get('mode') ?? 'ALL',
       objectiveCategory: params.get('objectiveCategory') ?? 'ALL',
       sector: params.get('sector') ?? 'ALL',
@@ -46,7 +52,7 @@ export default function Cases({ lockPhase }: { lockPhase?: string }) {
       sort: params.get('sort') ?? 'updatedAt:desc',
       page: Number(params.get('page') ?? 1),
     }),
-    [params, lockPhase]
+    [params, lockPhase, lockStatus]
   );
 
   const setFilter = (key: string, value: string) => {
@@ -63,41 +69,22 @@ export default function Cases({ lockPhase }: { lockPhase?: string }) {
     placeholderData: keepPreviousData,
   });
 
+  /**
+   * A filter the tab pinned is not one the user chose, so it must not show up in
+   * the badge or arm the Clear button — otherwise the "New applications" and
+   * "Cancellations" tabs look permanently filtered.
+   */
+  const locked = [lockPhase && 'phase', lockStatus && 'status'].filter(Boolean) as string[];
   const activeFilterCount = Object.entries(filters).filter(
-    ([k, v]) => !['page', 'sort', 'q'].includes(k) && v && v !== 'ALL'
+    ([k, v]) => !['page', 'sort', 'q', ...locked].includes(k) && v && v !== 'ALL'
   ).length;
+  const narrowed = activeFilterCount > 0 || !!filters.q;
 
   return (
     <>
-      <PageHeader
-        title={lockPhase ? 'Applications' : 'Cases'}
-        description={
-          lockPhase
-            ? 'New applications that have not yet been checked for eligibility.'
-            : 'Every plot application on record. Search by name, case number, plot or sector.'
-        }
-        actions={
-          <>
-            <Button
-              variant="outline"
-              icon={<Filter className="h-4 w-4" />}
-              onClick={() => setShowFilters((v) => !v)}
-            >
-              {showFilters ? 'Hide filters' : 'Narrow this down'}
-              {activeFilterCount > 0 && <Badge tone="info">{activeFilterCount}</Badge>}
-            </Button>
-            {can('cases:create') && (
-              <Link to="/cases/new">
-                <Button icon={<Plus className="h-4 w-4" />}>New application</Button>
-              </Link>
-            )}
-          </>
-        }
-      />
-
       <Card>
         <div className="border-b border-ink-200 p-3">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="Search by company name, case number, plot or sector…"
               value={filters.q}
@@ -118,11 +105,20 @@ export default function Cases({ lockPhase }: { lockPhase?: string }) {
               ]}
               className="w-48"
             />
-            {(activeFilterCount > 0 || filters.q) && (
+            {narrowed && (
               <Button variant="ghost" icon={<RotateCcw className="h-4 w-4" />} onClick={() => setParams({})}>
                 Clear
               </Button>
             )}
+            <Button
+              variant="outline"
+              className="ml-auto"
+              icon={<Filter className="h-4 w-4" />}
+              onClick={() => setShowFilters((v) => !v)}
+            >
+              {showFilters ? 'Hide filters' : 'Narrow this down'}
+              {activeFilterCount > 0 && <Badge tone="info">{activeFilterCount}</Badge>}
+            </Button>
           </div>
 
           {showFilters && (
@@ -145,14 +141,16 @@ export default function Cases({ lockPhase }: { lockPhase?: string }) {
                   ]}
                 />
               )}
-              <Select
-                value={filters.status}
-                onChange={(e) => setFilter('status', e.target.value)}
-                options={[
-                  { value: 'ALL', label: 'All statuses' },
-                  ...(meta?.caseStatuses ?? []).map((s) => ({ value: s, label: plainStatus(s).label })),
-                ]}
-              />
+              {!lockStatus && (
+                <Select
+                  value={filters.status}
+                  onChange={(e) => setFilter('status', e.target.value)}
+                  options={[
+                    { value: 'ALL', label: 'All statuses' },
+                    ...(meta?.caseStatuses ?? []).map((s) => ({ value: s, label: plainStatus(s).label })),
+                  ]}
+                />
+              )}
               <Select
                 value={filters.mode}
                 onChange={(e) => setFilter('mode', e.target.value)}
@@ -202,9 +200,21 @@ export default function Cases({ lockPhase }: { lockPhase?: string }) {
         ) : data.items.length === 0 ? (
           <EmptyState
             icon={<FileStack className="h-8 w-8" />}
-            title="Nothing found"
-            description="Try a shorter search, or clear the filters to see everything again."
-            action={<Button variant="outline" onClick={() => setParams({})}>Clear search and filters</Button>}
+            title={narrowed ? 'Nothing found' : lockStatus ? 'No cancellations yet' : 'Nothing here yet'}
+            description={
+              narrowed
+                ? 'Try a shorter search, or clear the filters to see everything again.'
+                : lockStatus
+                  ? 'An application lands here once a withdrawal, cancellation, or resumption has been approved on it.'
+                  : 'No application matches this view yet.'
+            }
+            action={
+              narrowed ? (
+                <Button variant="outline" onClick={() => setParams({})}>
+                  Clear search and filters
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <>

@@ -58,6 +58,9 @@ export type Meta = {
   documentTypes: string[];
   nocTypes: string[];
   paymentTypes: { value: string; label: string }[];
+  permitDocumentTypes: { type: string; kind: 'SUBMITTED' | 'ISSUED'; required: boolean }[];
+  permitPaymentTypes: string[];
+  permitStatuses: string[];
   grievanceCategories: string[];
   phases: { value: string; label: string }[];
   caseStatuses: string[];

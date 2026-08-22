@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileSignature, Map, Plus, Send } from 'lucide-react';
+import { FileSignature, Map, MapPin, Plus, Send } from 'lucide-react';
 import { get, patch, post, qs } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { compactIndian, fmtDate, fmtINR, humanise } from '../lib/format';
 import { PageHeader } from '../components/Layout';
+import { parseGisRef } from '../lib/gis';
 import {
   Badge,
   Button,
@@ -27,16 +28,16 @@ import {
   useToast,
 } from '../components/ui';
 
+/** Leaflet is ~170 kB and only the map dialog needs it — load it on first open. */
+const PlotMap = lazy(() => import('../components/PlotMap'));
+
 export default function LandInventory() {
   const [tab, setTab] = useState('plots');
   const { can } = useAuth();
 
   return (
     <>
-      <PageHeader
-        title="Land inventory & invitations"
-        description="Stage 0 — the plot registry and the invitation documents that open plots for application."
-      />
+      <PageHeader title="Land inventory & invitations" />
       <Tabs
         active={tab}
         onChange={setTab}
@@ -77,6 +78,7 @@ function Plots({ canManage }: { canManage: boolean }) {
   const [filters, setFilters] = useState({ q: '', themeCity: 'ALL', availability: 'ALL', page: 1 });
   const [editing, setEditing] = useState<any>(null);
   const [withdrawing, setWithdrawing] = useState<any>(null);
+  const [mapping, setMapping] = useState<any>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['plots', filters],
@@ -178,6 +180,7 @@ function Plots({ canManage }: { canManage: boolean }) {
                 <Th align="right">Reserve price</Th>
                 <Th>Objective</Th>
                 <Th>Availability</Th>
+                <Th>Map</Th>
                 <Th />
               </tr>
             </thead>
@@ -230,6 +233,25 @@ function Plots({ canManage }: { canManage: boolean }) {
                       <p className="mt-0.5 text-[10px] text-ink-400">{p._count.cases} case(s)</p>
                     )}
                   </Td>
+                  <Td>
+                    {parseGisRef(p.gisRef) ? (
+                      /* -ml-3 cancels the button's own padding so the pin sits
+                         under the column heading, not indented past it. */
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3"
+                        icon={<MapPin className="h-3.5 w-3.5" />}
+                        onClick={() => setMapping(p)}
+                      >
+                        View
+                      </Button>
+                    ) : (
+                      <span className="text-[11px] text-ink-400" title="No GIS reference on this plot">
+                        Not mapped
+                      </span>
+                    )}
+                  </Td>
                   <Td align="right">
                     {canManage && (
                       <div className="flex justify-end gap-1">
@@ -275,8 +297,16 @@ function Plots({ canManage }: { canManage: boolean }) {
       >
         {editing && (
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Plot code" required>
-              <Input value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value })} />
+            <Field
+              label="Plot code"
+              required
+              hint="LPS number — scheme / village / block / plot, e.g. LPS-04/THU/B12/P045"
+            >
+              <Input
+                value={editing.code}
+                placeholder="LPS-04/THU/B12/P045"
+                onChange={(e) => setEditing({ ...editing, code: e.target.value })}
+              />
             </Field>
             <Field label="Plot name" required>
               <Input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
@@ -292,8 +322,12 @@ function Plots({ canManage }: { canManage: boolean }) {
             <Field label="Survey reference" required>
               <Input value={editing.surveyRef} onChange={(e) => setEditing({ ...editing, surveyRef: e.target.value })} />
             </Field>
-            <Field label="GIS reference (lat,long)">
-              <Input value={editing.gisRef} onChange={(e) => setEditing({ ...editing, gisRef: e.target.value })} />
+            <Field label="GIS reference (lat,long)" hint="Decimal degrees — this is what the map pin uses.">
+              <Input
+                value={editing.gisRef}
+                placeholder="16.5183,80.5150"
+                onChange={(e) => setEditing({ ...editing, gisRef: e.target.value })}
+              />
             </Field>
             <Field label="Zone code" required>
               <Input value={editing.zoneCode} onChange={(e) => setEditing({ ...editing, zoneCode: e.target.value })} />
@@ -367,6 +401,8 @@ function Plots({ canManage }: { canManage: boolean }) {
         )}
       </Modal>
 
+      <MapDialog plot={mapping} plots={data?.items ?? []} onClose={() => setMapping(null)} />
+
       <WithdrawDialog
         plot={withdrawing}
         onClose={() => setWithdrawing(null)}
@@ -374,6 +410,60 @@ function Plots({ canManage }: { canManage: boolean }) {
         loading={withdraw.isPending}
       />
     </Card>
+  );
+}
+
+/**
+ * Where the plot actually is. Every plot on the page is drawn for context, with
+ * the one that was clicked zoomed to and opened.
+ */
+function MapDialog({ plot, plots, onClose }: { plot: any; plots: any[]; onClose: () => void }) {
+  const at = parseGisRef(plot?.gisRef);
+
+  return (
+    <Modal
+      open={!!plot}
+      onClose={onClose}
+      title={plot ? `${plot.code} on the map` : ''}
+      description={plot ? `${plot.name} · Amaravati Capital City, Andhra Pradesh` : ''}
+      size="xl"
+      footer={
+        <Button variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      {plot && (
+        <div className="space-y-3">
+          <dl className="grid grid-cols-2 gap-3 rounded-md border border-ink-200 bg-ink-50 p-3 text-xs sm:grid-cols-4">
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Survey reference</dt>
+              <dd className="mt-0.5 text-ink-700">{plot.surveyRef || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Coordinates</dt>
+              <dd className="mt-0.5 font-mono text-ink-700">
+                {at ? `${at.lat.toFixed(4)}, ${at.lng.toFixed(4)}` : '—'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Extent</dt>
+              <dd className="mt-0.5 text-ink-700">{plot.extentAcres.toFixed(2)} ac</dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Theme city / zone</dt>
+              <dd className="mt-0.5 text-ink-700">
+                {plot.themeCity} · <span className="font-mono">{plot.zoneCode}</span>
+              </dd>
+            </div>
+          </dl>
+
+          <Suspense fallback={<div className="py-10"><Spinner label="Loading the map…" /></div>}>
+            <PlotMap plots={plots} focusId={plot.id} />
+          </Suspense>
+        </div>
+      )}
+    </Modal>
   );
 }
 

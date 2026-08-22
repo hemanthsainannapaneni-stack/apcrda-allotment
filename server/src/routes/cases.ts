@@ -54,13 +54,25 @@ casesRouter.get(
     };
     eq('currentStageId', 'stageId');
     eq('phase', 'phase');
-    eq('status', 'status');
     eq('mode', 'mode');
     eq('objectiveCategory', 'objectiveCategory');
     eq('sector', 'sector');
     eq('holdingType', 'holdingType');
     eq('assigneeId', 'assigneeId');
     eq('plotId', 'plotId');
+
+    /**
+     * `status` takes either one value or a comma-separated set. The set form is
+     * what lets a single view span statuses that mean one thing to a user —
+     * "cancelled" covers both CANCELLED and RESUMED, since a resumption is one
+     * of the three outcomes a cancellation request can end in.
+     */
+    const status = String(req.query.status ?? '').trim();
+    if (status && status !== 'ALL') {
+      const wanted = status.split(',').map((s) => s.trim()).filter(Boolean);
+      if (wanted.length === 1) and.push({ status: wanted[0] });
+      else if (wanted.length > 1) and.push({ status: { in: wanted } });
+    }
 
     if (req.query.from) and.push({ createdAt: { gte: new Date(String(req.query.from)) } });
     if (req.query.to) and.push({ createdAt: { lte: new Date(String(req.query.to)) } });

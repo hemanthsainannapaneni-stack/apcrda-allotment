@@ -82,7 +82,6 @@ export default function Grievances() {
     <>
       <PageHeader
         title="Grievances & appeals"
-        description="Any adverse decision can be contested. Each grievance carries an SLA and is linked to the originating case."
         actions={
           can('grievance:raise', 'grievance:resolve') && (
             <Button icon={<Plus className="h-4 w-4" />} onClick={() => setRaising(true)}>

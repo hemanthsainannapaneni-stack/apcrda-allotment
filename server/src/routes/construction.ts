@@ -1,20 +1,30 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { asyncHandler, notFound, pageParams, paged } from '../lib/http';
+import { asyncHandler, badRequest, notFound, pageParams, paged } from '../lib/http';
 import { audit } from '../lib/audit';
 import { parseJson, toJson } from '../lib/json';
 import { getSettings } from '../lib/settings';
 import { notify } from '../lib/notify';
-import { CAPABILITIES, ROLES } from '../lib/enums';
-import { assertCaseAccess, caseScope, requireCapability } from '../middleware/auth';
+import {
+  CAPABILITIES,
+  DOCUMENT_REVIEW_STATUSES,
+  PERMIT_DOCUMENT_TYPES,
+  PERMIT_PAYMENT_TYPES,
+  PERMIT_STATUSES,
+  ROLES,
+} from '../lib/enums';
+import { assertCaseAccess, caseScope, isInvestor, requireCapability } from '../middleware/auth';
 import { addDays } from '../workflow/engine';
 
 export const constructionRouter = Router();
 
 // ---------------------------------------------------------------------------
-// Portfolio view: every case that has reached the development phase
+// Portfolio view: every case whose building permit is in play
 // ---------------------------------------------------------------------------
+
+const PERMIT_DOC_TYPES = PERMIT_DOCUMENT_TYPES.map((d) => d.type);
+const REQUIRED_DOC_TYPES = PERMIT_DOCUMENT_TYPES.filter((d) => d.required).map((d) => d.type);
 
 constructionRouter.get(
   '/',
@@ -23,6 +33,11 @@ constructionRouter.get(
     const and: any[] = [{ deletedAt: null }, caseScope(req), { phase: 'D' }];
     if (req.query.atRisk === 'true') {
       and.push({ compliance: { status: { in: ['AT_RISK', 'BREACH_NOTICE', 'CURE_PERIOD'] } } });
+    }
+    if (req.query.status && req.query.status !== 'ALL') {
+      const status = String(req.query.status);
+      // "Not started" also covers a case that has no permission row at all yet.
+      and.push(status === 'NOT_STARTED' ? { OR: [{ permission: { status } }, { permission: null }] } : { permission: { status } });
     }
     const where = { AND: and };
 
@@ -34,29 +49,98 @@ constructionRouter.get(
         take,
         include: {
           applicant: { select: { name: true } },
-          plot: { select: { code: true, themeCity: true } },
+          plot: { select: { code: true, themeCity: true, landUse: true } },
           compliance: true,
           permission: true,
           milestones: { orderBy: { sortOrder: 'asc' } },
+          documents: {
+            // An investor sees only what has been shared with them, exactly as /documents does.
+            where: { type: { in: PERMIT_DOC_TYPES }, ...(isInvestor(req) ? { visibility: 'INVESTOR' } : {}) },
+            orderBy: [{ uploadedAt: 'desc' }],
+            select: {
+              id: true,
+              type: true,
+              name: true,
+              version: true,
+              size: true,
+              mimeType: true,
+              uploadedAt: true,
+              uploadedBy: { select: { name: true } },
+              reviewStatus: true,
+              reviewedAt: true,
+              reviewedByName: true,
+              reviewNote: true,
+            },
+          },
+          payments: {
+            where: { type: { in: PERMIT_PAYMENT_TYPES } },
+            orderBy: [{ dueDate: 'asc' }],
+            select: {
+              id: true,
+              type: true,
+              label: true,
+              amount: true,
+              penalty: true,
+              status: true,
+              dueDate: true,
+              paidDate: true,
+              reference: true,
+            },
+          },
         },
       }),
       prisma.case.count({ where }),
     ]);
 
-    res.json(
-      paged(
-        items.map((c) => ({
-          ...c,
-          permission: c.permission ? { ...c.permission, nocs: parseJson<any[]>(c.permission.nocs, []) } : null,
-          progressPct: averageProgress(c.milestones),
-        })),
-        total,
-        page,
-        pageSize
-      )
-    );
+    res.json({
+      ...paged(items.map(shapePermitCase), total, page, pageSize),
+      docTypes: PERMIT_DOCUMENT_TYPES,
+      feeTypes: PERMIT_PAYMENT_TYPES,
+      statuses: PERMIT_STATUSES,
+    });
   })
 );
+
+/** One case as the permits desk needs it: permit, its papers, and its money. */
+function shapePermitCase(c: any) {
+  const nocs = c.permission ? parseJson<any[]>(c.permission.nocs, []) : [];
+  // Documents come back newest-first, so the first of a type is the live version.
+  const latest = new Map<string, any>();
+  for (const d of c.documents) if (!latest.has(d.type)) latest.set(d.type, d);
+  const supplied = new Set<string>(latest.keys());
+  const live = [...latest.values()];
+  const fees = c.payments as { amount: number; penalty: number; status: string; dueDate: Date | null }[];
+  const now = new Date();
+
+  return {
+    ...c,
+    permission: c.permission ? { ...c.permission, nocs } : null,
+    progressPct: averageProgress(c.milestones),
+    nocSummary: {
+      cleared: nocs.filter((n) => n.status === 'CLEARED').length,
+      pending: nocs.filter((n) => n.status === 'PENDING').length,
+      rejected: nocs.filter((n) => n.status === 'REJECTED').length,
+    },
+    docSummary: {
+      supplied: REQUIRED_DOC_TYPES.filter((t) => supplied.has(t)).length,
+      required: REQUIRED_DOC_TYPES.length,
+      missing: REQUIRED_DOC_TYPES.filter((t) => !supplied.has(t)),
+      // Scrutiny of the live version of each type — an older version that was
+      // approved does not count once a replacement has been filed.
+      approved: live.filter((d) => d.reviewStatus === 'APPROVED').length,
+      awaitingReview: live.filter((d) => d.reviewStatus === 'PENDING').length,
+      rejected: live.filter((d) => d.reviewStatus === 'REJECTED').length,
+    },
+    feeSummary: {
+      billed: fees.reduce((s, p) => s + p.amount + p.penalty, 0),
+      collected: fees.filter((p) => p.status === 'PAID').reduce((s, p) => s + p.amount, 0),
+      outstanding: fees
+        .filter((p) => p.status === 'PENDING' || p.status === 'OVERDUE')
+        .reduce((s, p) => s + p.amount + p.penalty, 0),
+      overdue: fees.filter((p) => p.status !== 'PAID' && p.dueDate && p.dueDate < now).length,
+    },
+  };
+}
 
 function averageProgress(milestones: { plannedPct: number; actualPct: number }[]) {
   if (!milestones.length) return 0;
@@ -82,11 +166,14 @@ constructionRouter.get(
 
 const permissionSchema = z.object({
   applicationNo: z.string().optional(),
+  applicationDate: z.string().nullable().optional(),
   proposedFsi: z.coerce.number().min(0).optional(),
   proposedFar: z.coerce.number().min(0).optional(),
   builtUpArea: z.coerce.number().min(0).optional(),
   layoutApproved: z.boolean().optional(),
-  status: z.enum(['NOT_STARTED', 'SUBMITTED', 'UNDER_SCRUTINY', 'SANCTIONED', 'REJECTED']).optional(),
+  status: z.enum(PERMIT_STATUSES).optional(),
+  sanctionNo: z.string().optional(),
+  validUntil: z.string().nullable().optional(),
   remarks: z.string().optional(),
   nocs: z
     .array(
@@ -108,6 +195,9 @@ constructionRouter.put(
     const body = permissionSchema.parse(req.body);
     const data: any = { ...body };
     if (body.nocs) data.nocs = toJson(body.nocs);
+    for (const key of ['applicationDate', 'validUntil'] as const) {
+      if (body[key] !== undefined) data[key] = body[key] ? new Date(body[key]!) : null;
+    }
     if (body.status === 'SANCTIONED') data.sanctionedAt = new Date();
 
     const row = await prisma.buildingPermission.upsert({
@@ -125,6 +215,113 @@ constructionRouter.put(
       after: { status: row.status, fsi: row.proposedFsi },
     });
     res.json({ ...row, nocs: parseJson<any[]>(row.nocs, []) });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Scrutiny of a filed document
+//
+// Only the permit document set, and only for whoever manages permits. Filing a
+// document is one thing; accepting it is the decision this records.
+// ---------------------------------------------------------------------------
+
+constructionRouter.patch(
+  '/documents/:id/review',
+  requireCapability(CAPABILITIES.CONSTRUCTION_MANAGE),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        status: z.enum(DOCUMENT_REVIEW_STATUSES),
+        note: z.string().max(500).optional().default(''),
+      })
+      .parse(req.body);
+
+    const doc = await prisma.document.findUnique({
+      where: { id: req.params.id },
+      include: { case: { select: { code: true } } },
+    });
+    if (!doc || !doc.caseId) throw notFound('Document not found.');
+    if (!PERMIT_DOC_TYPES.includes(doc.type)) {
+      throw badRequest(`"${doc.type}" is not part of the building-permit document set.`);
+    }
+    await assertCaseAccess(req, doc.caseId);
+
+    const row = await prisma.document.update({
+      where: { id: doc.id },
+      data: {
+        reviewStatus: body.status,
+        reviewNote: body.note,
+        // Back to "not yet looked at" clears the record of who looked.
+        reviewedAt: body.status === 'PENDING' ? null : new Date(),
+        reviewedByName: body.status === 'PENDING' ? '' : req.user!.name,
+      },
+    });
+
+    await audit(req, {
+      action: 'DOCUMENT_REVIEWED',
+      entity: 'Document',
+      entityId: row.id,
+      caseCode: doc.case?.code ?? '',
+      summary: `${row.type} v${row.version} → ${row.reviewStatus.toLowerCase()}`,
+      before: { reviewStatus: doc.reviewStatus },
+      after: { reviewStatus: row.reviewStatus, note: row.reviewNote },
+    });
+
+    res.json(row);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Permit fees
+//
+// The permits desk raises the demand itself — it owns the scrutiny, so it knows
+// what is chargeable — but only for the permit fee types. Everything else, and
+// recording the receipt, stays with Finance under payments:manage.
+// ---------------------------------------------------------------------------
+
+const feeSchema = z.object({
+  caseId: z.string().min(1),
+  type: z.string().refine((t) => PERMIT_PAYMENT_TYPES.includes(t), 'Not a building-permit fee.'),
+  label: z.string().min(2),
+  amount: z.coerce.number().positive(),
+  dueDate: z.string().optional().nullable(),
+  note: z.string().optional().default(''),
+});
+
+constructionRouter.post(
+  '/fees',
+  requireCapability(CAPABILITIES.CONSTRUCTION_MANAGE),
+  asyncHandler(async (req, res) => {
+    const body = feeSchema.parse(req.body);
+    await assertCaseAccess(req, body.caseId);
+
+    const row = await prisma.payment.create({
+      data: { ...body, dueDate: body.dueDate ? new Date(body.dueDate) : null },
+      include: { case: { select: { code: true, applicant: { select: { contactUserId: true } } } } },
+    });
+
+    await audit(req, {
+      action: 'PERMIT_FEE_RAISED',
+      entity: 'Payment',
+      entityId: row.id,
+      caseCode: row.case.code,
+      summary: `${row.label} of ₹${row.amount.toLocaleString('en-IN')} raised against the building permit`,
+      after: { type: row.type, amount: row.amount, dueDate: row.dueDate },
+    });
+
+    await notify({
+      userIds: row.case.applicant.contactUserId ? [row.case.applicant.contactUserId] : [],
+      roleKeys: [ROLES.FINANCE_OFFICER],
+      type: 'FINANCIAL',
+      title: `${row.case.code} — building permit fee raised`,
+      message: `${row.label} of ₹${row.amount.toLocaleString('en-IN')}${
+        row.dueDate ? `, due ${row.dueDate.toDateString()}` : ''
+      }.`,
+      caseId: row.caseId,
+      link: `/payments`,
+    });
+
+    res.status(201).json(row);
   })
 );
 

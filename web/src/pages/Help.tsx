@@ -20,10 +20,7 @@ export default function Help() {
 
   return (
     <>
-      <PageHeader
-        title="How this works"
-        description="A short guide to what this portal does, the steps a plot application goes through, and what the terms mean."
-      />
+      <PageHeader title="How this works" />
 
       <div className="space-y-4">
         <Callout tone="info" title="In one sentence">
@@ -43,7 +40,7 @@ export default function Help() {
               {myStages.length > 0 ? (
                 <>
                   Cases come to you at {myStages.length} point{myStages.length === 1 ? '' : 's'} in the process. When
-                  one arrives, it appears under <strong>Waiting on me</strong> and on your dashboard.
+                  one arrives, it appears under <strong>Applications → Waiting on me</strong> and on your dashboard.
                 </>
               ) : (
                 <>You do not make decisions on cases, but you can see them and the reports.</>

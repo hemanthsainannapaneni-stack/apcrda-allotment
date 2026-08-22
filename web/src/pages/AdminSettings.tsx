@@ -38,10 +38,7 @@ export default function AdminSettings() {
 
   return (
     <>
-      <PageHeader
-        title="Settings"
-        description="Workflow configuration, master data, organisation details, and the roles & permissions matrix. Values marked «CONFIRM» must be set to real figures before go-live."
-      />
+      <PageHeader title="Settings" />
       <Tabs
         active={tab}
         onChange={setTab}

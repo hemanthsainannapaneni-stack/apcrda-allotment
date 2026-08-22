@@ -90,7 +90,6 @@ export default function AdminUsers() {
     <>
       <PageHeader
         title="User management"
-        description="Create accounts, assign roles and committees, suspend access, and reset passwords."
         actions={
           <Button icon={<Plus className="h-4 w-4" />} onClick={() => setEditing({ ...EMPTY })}>
             Add user

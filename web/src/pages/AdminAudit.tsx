@@ -31,10 +31,7 @@ export default function AdminAudit() {
 
   return (
     <>
-      <PageHeader
-        title="Audit log"
-        description="Append-only record of every create, update, decision, export, and sign-in. Nothing in the portal can edit or delete an entry."
-      />
+      <PageHeader title="Audit log" />
 
       <Card>
         <CardHeader title="Global audit trail" subtitle={`${data?.pagination.total.toLocaleString('en-IN') ?? 0} entries`} />

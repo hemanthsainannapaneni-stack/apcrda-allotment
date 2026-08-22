@@ -26,7 +26,6 @@ export default function Notifications() {
     <>
       <PageHeader
         title="Notifications"
-        description="Task assignments, gate decisions, LOI expiry, payment dues, grievance updates, and compliance deadlines."
         actions={
           (data?.unread ?? 0) > 0 && (
             <Button

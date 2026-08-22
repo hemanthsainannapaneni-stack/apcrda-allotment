@@ -6,7 +6,7 @@ import { prisma } from '../src/lib/prisma';
 import { env } from '../src/lib/env';
 import { hashPassword } from '../src/lib/auth';
 import { toJson } from '../src/lib/json';
-import { CAPABILITIES, ROLES } from '../src/lib/enums';
+import { CAPABILITIES, PERMIT_DOCUMENT_TYPES, ROLES } from '../src/lib/enums';
 import { STAGE_CATALOGUE, type StageDef } from '../src/workflow/catalogue';
 import { ROLE_SEED, SETTINGS_SEED, PERMISSION_MATRIX } from './seed-data';
 import { CASE_SPECS, PLOT_SEED, USER_SEED, APPLICANT_SEED } from './seed-cases';
@@ -167,9 +167,12 @@ async function seedUsers() {
 }
 
 async function seedPlots() {
-  await prisma.plot.createMany({ data: PLOT_SEED as any });
+  // `key` is the short handle the rest of the seed wires by ("KC-01"); the code
+  // that goes on the record is the Amaravati LPS plot number.
+  const byCode = new Map(PLOT_SEED.map((p) => [p.code, p.key]));
+  await prisma.plot.createMany({ data: PLOT_SEED.map(({ key, ...plot }) => plot) as any });
   const rows = await prisma.plot.findMany();
-  return Object.fromEntries(rows.map((p) => [p.code, p])) as Record<string, any>;
+  return Object.fromEntries(rows.map((p) => [byCode.get(p.code) ?? p.code, p])) as Record<string, any>;
 }
 
 async function seedInvitations(plots: Record<string, any>) {
@@ -182,7 +185,7 @@ async function seedInvitations(plots: Record<string, any>) {
         'Allotment on 99-year lease. Minimum investment ₹250 Cr. Construction to commence within 24 months of agreement. EMD 2% of reserve value.',
       status: 'PUBLISHED',
       publishedAt: daysAgo(420),
-      plotCodes: ['KC-01', 'KC-02', 'EC-01'],
+      plotKeys: ['KC-01', 'KC-02', 'EC-01'],
     },
     {
       code: 'APCRDA/ID/2024/02',
@@ -191,7 +194,7 @@ async function seedInvitations(plots: Record<string, any>) {
       terms: 'Institutional allotment. Utilisation certificate required annually. Freehold not permitted.',
       status: 'PUBLISHED',
       publishedAt: daysAgo(300),
-      plotCodes: ['HC-01', 'SC-01'],
+      plotKeys: ['HC-01', 'SC-01'],
     },
     {
       code: 'APCRDA/ID/2025/01',
@@ -200,7 +203,7 @@ async function seedInvitations(plots: Record<string, any>) {
       terms: 'e-Auction on the APCRDA portal. Reserve price as notified. Down payment 25% within 30 days of LOI.',
       status: 'PUBLISHED',
       publishedAt: daysAgo(120),
-      plotCodes: ['FC-01', 'FC-02', 'MC-01'],
+      plotKeys: ['FC-01', 'FC-02', 'MC-01'],
     },
     {
       code: 'APCRDA/ID/2025/02',
@@ -208,7 +211,7 @@ async function seedInvitations(plots: Record<string, any>) {
       mode: 'NOMINATION',
       terms: 'Reserved for Government and statutory bodies. Concessional pricing subject to Cabinet approval.',
       status: 'DRAFT',
-      plotCodes: ['JC-01', 'TC-01'],
+      plotKeys: ['JC-01', 'TC-01'],
     },
   ];
 
@@ -222,7 +225,7 @@ async function seedInvitations(plots: Record<string, any>) {
         status: set.status,
         publishedAt: set.publishedAt ?? null,
         closesAt: set.publishedAt ? new Date(set.publishedAt.getTime() + 60 * DAY) : null,
-        plots: { create: set.plotCodes.filter((c) => plots[c]).map((c) => ({ plotId: plots[c].id })) },
+        plots: { create: set.plotKeys.filter((c) => plots[c]).map((c) => ({ plotId: plots[c].id })) },
       },
     });
   }
@@ -341,7 +344,7 @@ async function seedCases(ctx: WalkCtx) {
   let payments = 0;
 
   for (const [index, spec] of CASE_SPECS.entries()) {
-    const plot = spec.plotCode ? ctx.plots[spec.plotCode] : null;
+    const plot = spec.plotKey ? ctx.plots[spec.plotKey] : null;
     const applicant = ctx.applicants[spec.applicantKey];
 
     const code = `APCRDA/LA/${spec.year}/${String(index + 1).padStart(4, '0')}`;
@@ -560,7 +563,7 @@ function remarkFor(stage: StageDef, kind: string, round: number) {
 /** Plausible values for each stage's form. */
 function stageData(stage: StageDef, c: any, spec: any, ctx: WalkCtx): Record<string, any> {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const perAcre = ctx.plots[spec.plotCode]?.reservePrice ?? 40_000_000;
+  const perAcre = ctx.plots[spec.plotKey]?.reservePrice ?? 40_000_000;
 
   switch (stage.id) {
     case 'S0':
@@ -592,7 +595,7 @@ function stageData(stage: StageDef, c: any, spec: any, ctx: WalkCtx): Record<str
     case 'S7':
       return { cabinetMeetingNo: `CAB/${2025}/${8 + stage.order}`, cabinetDate: iso(daysAgo(Math.max(3, spec.startedDaysAgo - 220))), decisionNo: `CD-${200 + stage.order}`, conditions: 'Approved as recommended by the Authority.' };
     case 'S8':
-      return { goNumber: `G.O.Ms.No.${60 + stage.order}`, goDate: iso(daysAgo(Math.max(3, spec.startedDaysAgo - 240))), extentAcres: c.extentAcres, holdingType: c.holdingType, landUse: ctx.plots[spec.plotCode]?.landUse ?? 'Commercial', tenureYears: c.holdingType === 'LEASEHOLD' ? 99 : 0, landDetails: 'Boundaries as per the approved layout and the survey sketch annexed to the order.' };
+      return { goNumber: `G.O.Ms.No.${60 + stage.order}`, goDate: iso(daysAgo(Math.max(3, spec.startedDaysAgo - 240))), extentAcres: c.extentAcres, holdingType: c.holdingType, landUse: ctx.plots[spec.plotKey]?.landUse ?? 'Commercial', tenureYears: c.holdingType === 'LEASEHOLD' ? 99 : 0, landDetails: 'Boundaries as per the approved layout and the survey sketch annexed to the order.' };
     case 'S9':
       return { loiNumber: `LOI/${c.code.slice(-4)}`, loiIssuedOn: iso(daysAgo(Math.max(2, spec.startedDaysAgo - 260))), validityDays: 90, acceptedOn: iso(daysAgo(Math.max(1, spec.startedDaysAgo - 280))), acceptanceRef: `ACC/${c.code.slice(-4)}` };
     case 'S10':
@@ -606,7 +609,7 @@ function stageData(stage: StageDef, c: any, spec: any, ctx: WalkCtx): Record<str
     case 'S12A':
       return { possessionDate: iso(daysAgo(Math.max(2, (spec.agreementDaysAgo ?? spec.startedDaysAgo - 320) - 20))), boundariesDemarcated: true, handoverRef: `POS/${c.code.slice(-4)}`, siteNotes: 'Plot handed over after joint measurement with the allottee.' };
     case 'S13':
-      return { permissionApplicationNo: `BP/${c.code.slice(-4)}`, proposedFsi: ctx.plots[spec.plotCode]?.fsi ?? 3, proposedFar: ctx.plots[spec.plotCode]?.far ?? 3, builtUpArea: Math.round(c.extentAcres * 43_560 * 1.4), layoutApproved: true, nocsCleared: true, sanctionNo: `BPS-${700 + stage.order}`, sanctionDate: iso(daysAgo(Math.max(2, spec.startedDaysAgo - 400))) };
+      return { permissionApplicationNo: `BP/${c.code.slice(-4)}`, proposedFsi: ctx.plots[spec.plotKey]?.fsi ?? 3, proposedFar: ctx.plots[spec.plotKey]?.far ?? 3, builtUpArea: Math.round(c.extentAcres * 43_560 * 1.4), layoutApproved: true, nocsCleared: true, sanctionNo: `BPS-${700 + stage.order}`, sanctionDate: iso(daysAgo(Math.max(2, spec.startedDaysAgo - 400))) };
     case 'S14':
       return { commencementDate: spec.commenced === false ? '' : iso(daysAgo(Math.max(2, spec.startedDaysAgo - 430))), overallProgressPct: spec.progressPct ?? 45, lastInspection: iso(daysAgo(21)), delaysNoted: spec.progressPct && spec.progressPct < 30 ? 'Progress behind the approved milestone plan.' : 'On schedule against the approved milestones.' };
     case 'S15':
@@ -680,10 +683,83 @@ function seedStageDocuments(caseRow: any, stage: StageDef, ctx: WalkCtx, at: Dat
   }
 }
 
+/**
+ * The papers a permit file actually holds — plans, drawings, the BIM model, the
+ * NOCs, and (once granted) the permission order. Types the stage walk already
+ * filed are left alone so versions stay honest.
+ */
+function seedPermitDocuments(caseRow: any, ctx: WalkCtx, at: Date, sanctioned: boolean) {
+  const already = new Set(pending.documents.filter((d) => d.caseId === caseRow.id).map((d) => d.type));
+  const extension: Record<string, [string, string]> = {
+    'BIM Model': ['ifc', 'application/octet-stream'],
+    'Architectural Drawings': ['dwg', 'application/acad'],
+    'Structural Drawings': ['dwg', 'application/acad'],
+    'Services Drawings (MEP)': ['dwg', 'application/acad'],
+  };
+  const scrutiniser = ctx.users[USER_SEED.find((u) => u.roleKey === ROLES.PLANNING_OFFICER)?.email ?? 'admin@apcrda.demo'];
+
+  /**
+   * A sanctioned permit means every drawing was accepted. One still in scrutiny
+   * shows the real mixture — some cleared, one sent back, the rest unread.
+   */
+  const review = (type: string) => {
+    // Nobody scrutinises APCRDA's own order — it is the output, not a submission.
+    if (PERMIT_DOCUMENT_TYPES.find((d) => d.type === type)?.kind === 'ISSUED') {
+      return { status: 'APPROVED', note: '' };
+    }
+    if (sanctioned) return { status: 'APPROVED', note: 'Checked against the zonal regulations. In order.' };
+    if (type === 'Structural Drawings') {
+      return { status: 'REJECTED', note: 'Load calculations for the podium levels are missing. Please resubmit.' };
+    }
+    if (type === 'BIM Model' || type === 'Fire Safety Plan') return { status: 'PENDING', note: '' };
+    return { status: 'APPROVED', note: 'Checked and found in order.' };
+  };
+
+  const stamp = (row: any) => {
+    const { status, note } = review(row.type);
+    row.reviewStatus = status;
+    row.reviewNote = note;
+    row.reviewedAt = status === 'PENDING' ? null : new Date(at.getTime() + 3 * DAY);
+    row.reviewedByName = status === 'PENDING' ? '' : scrutiniser?.name ?? '';
+  };
+
+  // Permit papers the stage walk already filed still get scrutinised.
+  for (const row of pending.documents) {
+    if (row.caseId === caseRow.id && PERMIT_DOCUMENT_TYPES.some((d) => d.type === row.type)) stamp(row);
+  }
+
+  for (const d of PERMIT_DOCUMENT_TYPES) {
+    if (d.kind === 'ISSUED' && !sanctioned) continue;
+    if (d.type === 'Occupancy Certificate') continue; // granted only at closure
+    if (already.has(d.type)) continue;
+
+    const versionKey = `${caseRow.id}:${d.type}`;
+    const version = (docVersions.get(versionKey) ?? 0) + 1;
+    docVersions.set(versionKey, version);
+    const [ext, mime] = extension[d.type] ?? ['pdf', 'application/pdf'];
+
+    const row: any = {
+      caseId: caseRow.id,
+      stageId: 'S13',
+      type: d.type,
+      name: `${d.type.replace(/[^\w]+/g, '-')}-${caseRow.code.slice(-4)}.${ext}`,
+      version,
+      fileUrl: ctx.placeholderUrl,
+      mimeType: mime,
+      size: d.type === 'BIM Model' ? 4_812_004 : 18_432,
+      visibility: 'INVESTOR',
+      uploadedById: scrutiniser?.id,
+      uploadedAt: at,
+    };
+    stamp(row);
+    pending.documents.push(row);
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 async function seedFinancials(caseRow: any, spec: any, ctx: WalkCtx) {
-  const perAcre = ctx.plots[spec.plotCode]?.reservePrice ?? 40_000_000;
+  const perAcre = ctx.plots[spec.plotKey]?.reservePrice ?? 40_000_000;
   const total = Math.round(perAcre * caseRow.extentAcres);
   const order = stageById[spec.stopAt].order;
   let count = 0;
@@ -748,6 +824,48 @@ async function seedFinancials(caseRow: any, spec: any, ctx: WalkCtx) {
     }
   }
 
+  // Building-permit fees, once the permission application is on the desk.
+  if (order >= stageById.S13.order) {
+    const builtUp = Math.round(caseRow.extentAcres * 43_560 * 1.4);
+    const sanctioned = order > stageById.S13.order;
+    const raisedDaysAgo = Math.max(20, spec.startedDaysAgo - 425);
+    const settle = (paid: boolean) => ({
+      paidDate: paid ? daysAgo(Math.max(2, raisedDaysAgo - 6)) : null,
+      status: paid ? 'PAID' : 'PENDING',
+      reference: paid ? `CHL${Math.floor(Math.random() * 900000 + 100000)}` : '',
+    });
+
+    // The scrutiny fee is payable with the application; the rest fall due on sanction.
+    await add({
+      type: 'PERMIT_SCRUTINY_FEE',
+      label: 'Building permit scrutiny fee',
+      amount: Math.round(builtUp * 12),
+      dueDate: daysAgo(raisedDaysAgo),
+      ...settle(true),
+    });
+    await add({
+      type: 'DEVELOPMENT_CHARGE',
+      label: 'Development charges',
+      amount: Math.round(builtUp * 45),
+      dueDate: daysAgo(raisedDaysAgo - 10),
+      ...settle(sanctioned),
+    });
+    await add({
+      type: 'BETTERMENT_CHARGE',
+      label: 'Betterment charges',
+      amount: Math.round(builtUp * 18),
+      dueDate: daysAgo(raisedDaysAgo - 10),
+      ...settle(sanctioned),
+    });
+    await add({
+      type: 'LABOUR_CESS',
+      label: 'Labour cess (1% of construction cost)',
+      amount: Math.round(builtUp * 2_200 * 0.01),
+      dueDate: daysAgo(raisedDaysAgo - 20),
+      ...settle(sanctioned),
+    });
+  }
+
   // Stamp duty & registration once the agreement is executed.
   if (order >= stageById.S12.order && total > 0) {
     await add({
@@ -778,16 +896,28 @@ async function seedExtras(caseRow: any, spec: any, ctx: WalkCtx) {
 
   // Building permission record
   if (order >= stageById.S13.order) {
+    const sanctioned = order > stageById.S13.order;
+    const appliedAt = daysAgo(Math.max(20, spec.startedDaysAgo - 425));
+    const sanctionedAt = sanctioned ? daysAgo(Math.max(5, spec.startedDaysAgo - 400)) : null;
+
+    seedPermitDocuments(caseRow, ctx, appliedAt, sanctioned);
+
     await prisma.buildingPermission.create({
       data: {
         caseId: caseRow.id,
         applicationNo: `BP/${caseRow.code.slice(-4)}`,
-        proposedFsi: ctx.plots[spec.plotCode]?.fsi ?? 3,
-        proposedFar: ctx.plots[spec.plotCode]?.far ?? 3,
+        applicationDate: appliedAt,
+        proposedFsi: ctx.plots[spec.plotKey]?.fsi ?? 3,
+        proposedFar: ctx.plots[spec.plotKey]?.far ?? 3,
         builtUpArea: Math.round(caseRow.extentAcres * 43_560 * 1.4),
         layoutApproved: true,
-        status: order > stageById.S13.order ? 'SANCTIONED' : 'UNDER_SCRUTINY',
-        sanctionedAt: order > stageById.S13.order ? daysAgo(Math.max(5, spec.startedDaysAgo - 400)) : null,
+        status: sanctioned ? 'SANCTIONED' : 'UNDER_SCRUTINY',
+        sanctionNo: sanctioned ? `BP-SANC/${caseRow.code.slice(-4)}/${sanctionedAt!.getFullYear()}` : '',
+        sanctionedAt,
+        // A sanctioned permit runs three years from the date it was granted.
+        validUntil: sanctionedAt
+          ? new Date(new Date(sanctionedAt).setFullYear(sanctionedAt.getFullYear() + 3))
+          : null,
         nocs: toJson([
           { type: 'Fire Services', status: 'CLEARED', ref: 'FS/2025/114', date: daysAgo(410).toISOString().slice(0, 10) },
           { type: 'Environment (SEIAA)', status: 'CLEARED', ref: 'EC/2025/58', date: daysAgo(400).toISOString().slice(0, 10) },

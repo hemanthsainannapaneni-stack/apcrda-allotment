@@ -26,7 +26,7 @@ export default function Profile() {
 
   return (
     <>
-      <PageHeader title="My profile" description="Your account, role, and what that role can do in the portal." />
+      <PageHeader title="My profile" />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
